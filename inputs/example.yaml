@@ -1,0 +1,4 @@
+mechanisms:
+  - uds
+message_size: 1024
+msg_count: 10000

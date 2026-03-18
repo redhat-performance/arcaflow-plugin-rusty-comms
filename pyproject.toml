@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "arcaflow-plugin-rusty-comms"
+version = "0.1.0"
+description = "Arcaflow plugin wrapping the rusty-comms IPC benchmark suite"
+authors = ["Arcalot"]
+license = "Apache-2.0"
+
+packages = [
+   { include="rusty_comms_plugin.py", from="./arcaflow_plugin_rusty_comms"  },
+   { include="rusty_comms_schema.py", from="./arcaflow_plugin_rusty_comms"  },
+]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+arcaflow-plugin-sdk = "^0.14.0"
+
+[tool.poetry.dev-dependencies]
+docformatter = "^1.5.0"
+autoflake = "^2.0.0"
+pydocstyle = "^6.1.1"
+black = "^24.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
