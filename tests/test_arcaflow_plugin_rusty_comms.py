@@ -28,6 +28,7 @@ from rusty_comms_schema import (
     SuccessOutput,
     SystemInfo,
     TestConfiguration,
+    TestRunConfig,
     ThroughputMetrics,
 )
 
@@ -55,16 +56,16 @@ SAMPLE_LATENCY = LatencyMetrics(
     latency_type="OneWay",
     min_ns=1500,
     max_ns=45000,
-    mean_ns=3200.5,
-    median_ns=3100.0,
-    std_dev_ns=1200.0,
+    mean_ns=3201,
+    median_ns=3100,
+    std_dev_ns=1200,
     percentiles=SAMPLE_PERCENTILES,
     total_samples=10000,
 )
 
 SAMPLE_THROUGHPUT = ThroughputMetrics(
-    messages_per_second=312500.0,
-    bytes_per_second=320000000.0,
+    messages_per_second=312500,
+    bytes_per_second=320000000,
     total_messages=10000,
     total_bytes=10240000,
     duration_ns=32000000,
@@ -94,7 +95,7 @@ SAMPLE_BENCHMARK_SUMMARY = BenchmarkSummary(
     average_throughput_mbps=305.17,
     peak_throughput_mbps=310.0,
     error_count=0,
-    average_latency_ns=3200.5,
+    average_latency_ns=3201,
     min_latency_ns=1500,
     max_latency_ns=45000,
     p95_latency_ns=5200,
@@ -254,16 +255,39 @@ class SerializationTest(unittest.TestCase):
 
     @staticmethod
     def test_input_params_serialization():
-        """InputParams should serialize and deserialize correctly."""
+        """InputParams with a single test should serialize correctly."""
         plugin.test_object_serialization(
-            InputParams(mechanisms=[Mechanism.uds])
+            InputParams(
+                tests=[TestRunConfig(mechanisms=[Mechanism.uds])]
+            )
         )
 
     @staticmethod
-    def test_input_params_all_fields_serialization():
-        """InputParams with all fields should serialize correctly."""
+    def test_input_params_multiple_tests_serialization():
+        """InputParams with multiple tests should serialize correctly."""
         plugin.test_object_serialization(
             InputParams(
+                tests=[
+                    TestRunConfig(
+                        mechanisms=[Mechanism.uds, Mechanism.tcp],
+                        message_size=4096,
+                        msg_count=50000,
+                    ),
+                    TestRunConfig(
+                        mechanisms=[Mechanism.pmq],
+                        message_size=1024,
+                        duration="30s",
+                        blocking=True,
+                    ),
+                ]
+            )
+        )
+
+    @staticmethod
+    def test_test_run_config_all_fields_serialization():
+        """TestRunConfig with all fields should serialize correctly."""
+        plugin.test_object_serialization(
+            TestRunConfig(
                 mechanisms=[Mechanism.uds, Mechanism.tcp],
                 message_size=4096,
                 msg_count=50000,
@@ -325,34 +349,52 @@ class SerializationTest(unittest.TestCase):
 
 
 class CLIArgsTest(unittest.TestCase):
-    """Verify CLI argument construction from InputParams."""
+    """Verify CLI argument construction from TestRunConfig."""
 
     def test_minimal_args(self):
         """Minimal input should produce mechanism and output file args."""
-        params = InputParams(mechanisms=[Mechanism.uds])
+        config = TestRunConfig(mechanisms=[Mechanism.uds])
         args = rusty_comms_plugin._build_cli_args(
-            params, "/tmp/out.json"
+            config, "/tmp/out.json"
         )
         self.assertIn("-m", args)
         self.assertIn("uds", args)
         self.assertIn("--output-file", args)
         self.assertIn("/tmp/out.json", args)
 
+    def test_blocking_default(self):
+        """Blocking should be enabled by default when not specified."""
+        config = TestRunConfig(mechanisms=[Mechanism.uds])
+        args = rusty_comms_plugin._build_cli_args(
+            config, "/tmp/out.json"
+        )
+        self.assertIn("--blocking", args)
+
+    def test_blocking_explicit_false(self):
+        """Setting blocking to False should disable it."""
+        config = TestRunConfig(
+            mechanisms=[Mechanism.uds], blocking=False
+        )
+        args = rusty_comms_plugin._build_cli_args(
+            config, "/tmp/out.json"
+        )
+        self.assertNotIn("--blocking", args)
+
     def test_all_mechanisms(self):
         """The 'all' mechanism should pass through correctly."""
-        params = InputParams(mechanisms=[Mechanism.all])
+        config = TestRunConfig(mechanisms=[Mechanism.all])
         args = rusty_comms_plugin._build_cli_args(
-            params, "/tmp/out.json"
+            config, "/tmp/out.json"
         )
         self.assertIn("all", args)
 
     def test_multiple_mechanisms(self):
         """Multiple mechanisms should appear in order."""
-        params = InputParams(
+        config = TestRunConfig(
             mechanisms=[Mechanism.uds, Mechanism.shm, Mechanism.tcp]
         )
         args = rusty_comms_plugin._build_cli_args(
-            params, "/tmp/out.json"
+            config, "/tmp/out.json"
         )
         m_idx = args.index("-m")
         self.assertEqual(args[m_idx + 1], "uds")
@@ -361,7 +403,7 @@ class CLIArgsTest(unittest.TestCase):
 
     def test_optional_params_included(self):
         """Optional params should appear only when set."""
-        params = InputParams(
+        config = TestRunConfig(
             mechanisms=[Mechanism.tcp],
             message_size=4096,
             msg_count=50000,
@@ -369,7 +411,7 @@ class CLIArgsTest(unittest.TestCase):
             continue_on_error=True,
         )
         args = rusty_comms_plugin._build_cli_args(
-            params, "/tmp/out.json"
+            config, "/tmp/out.json"
         )
         self.assertIn("-s", args)
         self.assertIn("4096", args)
@@ -380,12 +422,12 @@ class CLIArgsTest(unittest.TestCase):
 
     def test_percentiles_formatting(self):
         """Percentiles should each appear as separate arguments."""
-        params = InputParams(
+        config = TestRunConfig(
             mechanisms=[Mechanism.uds],
             percentiles=[50.0, 95.0, 99.9],
         )
         args = rusty_comms_plugin._build_cli_args(
-            params, "/tmp/out.json"
+            config, "/tmp/out.json"
         )
         self.assertIn("--percentiles", args)
         self.assertIn("50.0", args)
@@ -394,12 +436,12 @@ class CLIArgsTest(unittest.TestCase):
 
     def test_extra_args_appended(self):
         """Extra args should be appended at the end."""
-        params = InputParams(
+        config = TestRunConfig(
             mechanisms=[Mechanism.uds],
             extra_args=["--verbose", "--log-file", "/tmp/bench.log"],
         )
         args = rusty_comms_plugin._build_cli_args(
-            params, "/tmp/out.json"
+            config, "/tmp/out.json"
         )
         self.assertIn("--verbose", args)
         self.assertIn("--log-file", args)
@@ -407,16 +449,27 @@ class CLIArgsTest(unittest.TestCase):
 
     def test_false_booleans_not_included(self):
         """Boolean params set to False should not appear as flags."""
-        params = InputParams(
+        config = TestRunConfig(
             mechanisms=[Mechanism.uds],
             blocking=False,
             shm_direct=False,
         )
         args = rusty_comms_plugin._build_cli_args(
-            params, "/tmp/out.json"
+            config, "/tmp/out.json"
         )
         self.assertNotIn("--blocking", args)
         self.assertNotIn("--shm-direct", args)
+
+    def test_empty_duration_not_passed(self):
+        """Empty duration string should not be passed to CLI."""
+        config = TestRunConfig(
+            mechanisms=[Mechanism.uds],
+            duration="",
+        )
+        args = rusty_comms_plugin._build_cli_args(
+            config, "/tmp/out.json"
+        )
+        self.assertNotIn("-d", args)
 
 
 class JSONParsingTest(unittest.TestCase):
@@ -472,9 +525,29 @@ class JSONParsingTest(unittest.TestCase):
 class FunctionalTest(unittest.TestCase):
     """Functional tests with mocked subprocess execution."""
 
+    def _make_popen_mock(
+        self, returncode=0, stdout="", stderr=""
+    ):
+        """Create a mock Popen instance with communicate().
+
+        Args:
+            returncode: Exit code returned by the process.
+            stdout: Standard output text.
+            stderr: Standard error text.
+
+        Returns:
+            A configured Mock that behaves like Popen.
+        """
+        proc = mock.Mock()
+        proc.communicate.return_value = (stdout, stderr)
+        proc.returncode = returncode
+        proc.poll.return_value = returncode
+        proc.pid = 12345
+        return proc
+
     @mock.patch("rusty_comms_plugin._find_binary")
-    @mock.patch("rusty_comms_plugin.subprocess.run")
-    def test_success_run(self, mock_run, mock_find):
+    @mock.patch("rusty_comms_plugin.subprocess.Popen")
+    def test_success_run(self, mock_popen, mock_find):
         """Successful benchmark run should return SuccessOutput."""
         mock_find.return_value = "/usr/local/bin/ipc-benchmark"
 
@@ -485,20 +558,19 @@ class FunctionalTest(unittest.TestCase):
                 if arg == "--output-file" and i + 1 < len(cmd):
                     output_path = cmd[i + 1]
                     os.makedirs(
-                        os.path.dirname(output_path), exist_ok=True
+                        os.path.dirname(output_path),
+                        exist_ok=True,
                     )
                     with open(output_path, "w") as f:
                         json.dump(sample_json, f)
                     break
-            result = mock.Mock()
-            result.returncode = 0
-            result.stdout = ""
-            result.stderr = ""
-            return result
+            return self._make_popen_mock()
 
-        mock_run.side_effect = side_effect
+        mock_popen.side_effect = side_effect
 
-        params = InputParams(mechanisms=[Mechanism.uds])
+        params = InputParams(
+            tests=[TestRunConfig(mechanisms=[Mechanism.uds])]
+        )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
         )
@@ -508,18 +580,59 @@ class FunctionalTest(unittest.TestCase):
         self.assertEqual(output_data.metadata.version, "0.1.0")
 
     @mock.patch("rusty_comms_plugin._find_binary")
-    @mock.patch("rusty_comms_plugin.subprocess.run")
-    def test_nonzero_exit_returns_error(self, mock_run, mock_find):
+    @mock.patch("rusty_comms_plugin.subprocess.Popen")
+    def test_multiple_tests_run(self, mock_popen, mock_find):
+        """Multiple test runs should merge results."""
+        mock_find.return_value = "/usr/local/bin/ipc-benchmark"
+
+        sample_json = _build_sample_json()
+
+        def side_effect(cmd, **kwargs):
+            for i, arg in enumerate(cmd):
+                if arg == "--output-file" and i + 1 < len(cmd):
+                    output_path = cmd[i + 1]
+                    os.makedirs(
+                        os.path.dirname(output_path),
+                        exist_ok=True,
+                    )
+                    with open(output_path, "w") as f:
+                        json.dump(sample_json, f)
+                    break
+            return self._make_popen_mock()
+
+        mock_popen.side_effect = side_effect
+
+        params = InputParams(
+            tests=[
+                TestRunConfig(mechanisms=[Mechanism.uds]),
+                TestRunConfig(mechanisms=[Mechanism.tcp]),
+            ]
+        )
+        output_id, output_data = rusty_comms_plugin.run_benchmark(
+            params=params, run_id="test_run"
+        )
+
+        self.assertEqual(output_id, "success")
+        self.assertIsInstance(output_data, SuccessOutput)
+        self.assertEqual(len(output_data.results), 2)
+        self.assertEqual(mock_popen.call_count, 2)
+
+    @mock.patch("rusty_comms_plugin._find_binary")
+    @mock.patch("rusty_comms_plugin.subprocess.Popen")
+    def test_nonzero_exit_returns_error(
+        self, mock_popen, mock_find
+    ):
         """Non-zero exit code should return ErrorOutput."""
         mock_find.return_value = "/usr/local/bin/ipc-benchmark"
 
-        result = mock.Mock()
-        result.returncode = 1
-        result.stdout = ""
-        result.stderr = "benchmark failed: permission denied"
-        mock_run.return_value = result
+        mock_popen.return_value = self._make_popen_mock(
+            returncode=1,
+            stderr="benchmark failed: permission denied",
+        )
 
-        params = InputParams(mechanisms=[Mechanism.uds])
+        params = InputParams(
+            tests=[TestRunConfig(mechanisms=[Mechanism.uds])]
+        )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
         )
@@ -534,7 +647,9 @@ class FunctionalTest(unittest.TestCase):
     )
     def test_missing_binary_returns_error(self, mock_find):
         """Missing binary should return ErrorOutput."""
-        params = InputParams(mechanisms=[Mechanism.uds])
+        params = InputParams(
+            tests=[TestRunConfig(mechanisms=[Mechanism.uds])]
+        )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
         )
@@ -545,14 +660,18 @@ class FunctionalTest(unittest.TestCase):
 
     @mock.patch("rusty_comms_plugin._find_binary")
     @mock.patch(
-        "rusty_comms_plugin.subprocess.run",
+        "rusty_comms_plugin.subprocess.Popen",
         side_effect=OSError("exec format error"),
     )
-    def test_os_error_returns_error(self, mock_run, mock_find):
+    def test_os_error_returns_error(
+        self, mock_popen, mock_find
+    ):
         """OSError during execution should return ErrorOutput."""
         mock_find.return_value = "/usr/local/bin/ipc-benchmark"
 
-        params = InputParams(mechanisms=[Mechanism.tcp])
+        params = InputParams(
+            tests=[TestRunConfig(mechanisms=[Mechanism.tcp])]
+        )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
         )

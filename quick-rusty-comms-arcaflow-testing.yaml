@@ -1,0 +1,43 @@
+# Comprehensive IPC performance assessment
+# Each test entry runs independently with its own mechanisms.
+
+tests:
+  # Test 1: UDS and TCP with 4KB messages, 50K count
+  - mechanisms:
+      - uds
+      - tcp
+    message_size: 4096
+    msg_count: 50000
+    warmup_iterations: 1000
+    continue_on_error: true
+    quiet: true
+
+  # Test 2: UDS and TCP with 1KB messages, 1M count
+  - mechanisms:
+      - uds
+      - tcp
+    message_size: 1024
+    msg_count: 1000000
+    warmup_iterations: 1000
+    continue_on_error: true
+    quiet: true
+
+  # Test 3: PMQ and TCP with 1KB messages, 3 min duration
+  - mechanisms:
+      - pmq
+      - tcp
+    message_size: 1024
+    duration: 3m
+    warmup_iterations: 1000
+    continue_on_error: true
+    quiet: true
+
+  # Test 4: PMQ and TCP with 1KB messages, 1M count
+  - mechanisms:
+      - pmq
+      - tcp
+    message_size: 1024
+    msg_count: 1000000
+    warmup_iterations: 1000
+    continue_on_error: true
+    quiet: true

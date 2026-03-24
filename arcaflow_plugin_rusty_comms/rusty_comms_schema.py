@@ -7,7 +7,7 @@ map to the rusty-comms CLI arguments and JSON output format respectively.
 
 import enum
 import typing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from arcaflow_plugin_sdk import schema
 
 
@@ -32,11 +32,13 @@ class Mechanism(enum.Enum):
 
 
 @dataclass
-class InputParams:
-    """Configuration parameters for a rusty-comms benchmark run.
+class TestRunConfig:
+    """Configuration for a single benchmark test run.
 
-    All parameters except ``mechanisms`` are optional and will fall back
-    to the rusty-comms defaults when omitted.
+    Each test run specifies which IPC mechanisms to test and
+    the parameters for that run. All parameters except
+    ``mechanisms`` are optional and fall back to rusty-comms
+    defaults when omitted.
     """
 
     mechanisms: typing.Annotated[
@@ -86,7 +88,8 @@ class InputParams:
         typing.Optional[bool],
         schema.name("Blocking Mode"),
         schema.description(
-            "Use synchronous blocking I/O instead of async Tokio."
+            "Use blocking I/O. Defaults to true when not"
+            " specified. Set to false for async Tokio mode."
         ),
     ] = None
 
@@ -230,6 +233,26 @@ class InputParams:
     ] = None
 
 
+@dataclass
+class InputParams:
+    """Top-level input for the rusty-comms benchmark plugin.
+
+    Contains a list of test run configurations. Each test run
+    can specify its own mechanisms and parameters, allowing
+    multiple benchmark profiles in a single invocation.
+    """
+
+    tests: typing.Annotated[
+        typing.List[TestRunConfig],
+        schema.name("Test Runs"),
+        schema.description(
+            "List of benchmark test configurations. Each entry"
+            " specifies mechanisms and parameters for one run."
+        ),
+        schema.min(1),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Output schema – mirrors the rusty-comms FinalBenchmarkResults JSON
 # ---------------------------------------------------------------------------
@@ -275,19 +298,19 @@ class LatencyMetrics:
     ]
 
     mean_ns: typing.Annotated[
-        float,
+        int,
         schema.name("Mean (ns)"),
         schema.description("Mean latency in nanoseconds."),
     ]
 
     median_ns: typing.Annotated[
-        float,
+        int,
         schema.name("Median (ns)"),
         schema.description("Median (P50) latency in nanoseconds."),
     ]
 
     std_dev_ns: typing.Annotated[
-        float,
+        int,
         schema.name("Std Dev (ns)"),
         schema.description(
             "Standard deviation of latency in nanoseconds."
@@ -312,13 +335,13 @@ class ThroughputMetrics:
     """Throughput measurements from a benchmark run."""
 
     messages_per_second: typing.Annotated[
-        float,
+        int,
         schema.name("Messages/sec"),
         schema.description("Message transmission rate."),
     ]
 
     bytes_per_second: typing.Annotated[
-        float,
+        int,
         schema.name("Bytes/sec"),
         schema.description("Data transmission rate in bytes per second."),
     ]
@@ -461,7 +484,7 @@ class BenchmarkSummary:
     ]
 
     average_latency_ns: typing.Annotated[
-        typing.Optional[float],
+        typing.Optional[int],
         schema.name("Average Latency (ns)"),
         schema.description("Average latency in nanoseconds."),
     ] = None
@@ -593,6 +616,55 @@ class BenchmarkResult:
         typing.Optional[PerformanceMetrics],
         schema.name("Round-Trip Results"),
         schema.description("Round-trip latency/throughput results."),
+    ] = None
+
+    input_blocking: typing.Annotated[
+        typing.Optional[bool],
+        schema.name("Input: Blocking"),
+        schema.description(
+            "Original blocking flag from the test input."
+            " True = blocking, False = async, None = default."
+        ),
+    ] = None
+
+    input_shm_direct: typing.Annotated[
+        typing.Optional[bool],
+        schema.name("Input: SHM Direct"),
+        schema.description(
+            "Original shm_direct flag from the test input."
+        ),
+    ] = None
+
+    input_one_way: typing.Annotated[
+        typing.Optional[bool],
+        schema.name("Input: One-Way"),
+        schema.description(
+            "Original one_way flag from the test input."
+        ),
+    ] = None
+
+    input_round_trip: typing.Annotated[
+        typing.Optional[bool],
+        schema.name("Input: Round-Trip"),
+        schema.description(
+            "Original round_trip flag from the test input."
+        ),
+    ] = None
+
+    input_send_delay: typing.Annotated[
+        typing.Optional[str],
+        schema.name("Input: Send Delay"),
+        schema.description(
+            "Original send_delay value from the test input."
+        ),
+    ] = None
+
+    input_concurrency: typing.Annotated[
+        typing.Optional[int],
+        schema.name("Input: Concurrency"),
+        schema.description(
+            "Original concurrency value from the test input."
+        ),
     ] = None
 
 

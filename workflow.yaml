@@ -1,0 +1,191 @@
+version: v0.2.0
+
+input:
+  root: RootObject
+  objects:
+    RootObject:
+      id: RootObject
+      properties:
+        tests:
+          display:
+            name: Test Runs
+            description: >
+              List of benchmark test configurations. Each
+              entry specifies mechanisms and parameters
+              for one run.
+          type:
+            type_id: list
+            min: 1
+            items:
+              type_id: ref
+              id: TestRunConfig
+          required: true
+    TestRunConfig:
+      id: TestRunConfig
+      properties:
+        mechanisms:
+          display:
+            name: IPC Mechanisms
+            description: >
+              IPC mechanisms to benchmark. Valid values:
+              uds, shm, tcp, pmq, all.
+          type:
+            type_id: list
+            min: 1
+            items:
+              type_id: enum_string
+              values:
+                uds:
+                  name: uds
+                shm:
+                  name: shm
+                tcp:
+                  name: tcp
+                pmq:
+                  name: pmq
+                all:
+                  name: all
+          required: true
+        message_size:
+          display:
+            name: Message Size
+            description: Message payload size in bytes.
+          type:
+            type_id: integer
+            min: 1
+          required: false
+        msg_count:
+          display:
+            name: Message Count
+            description: Number of messages to send.
+          type:
+            type_id: integer
+            min: 1
+          required: false
+        duration:
+          display:
+            name: Duration
+            description: >
+              Fixed test duration, e.g. '30s', '5m'.
+              Takes precedence over msg_count.
+          type:
+            type_id: string
+          required: false
+        concurrency:
+          display:
+            name: Concurrency
+            description: Number of concurrent workers.
+          type:
+            type_id: integer
+            min: 1
+          required: false
+        buffer_size:
+          display:
+            name: Buffer Size
+            description: >
+              Internal buffer size in bytes for shared
+              memory. Keep under 60000000 (60MB) in
+              containers with default /dev/shm (64MB).
+          type:
+            type_id: integer
+            min: 1
+          required: false
+        blocking:
+          display:
+            name: Blocking Mode
+            description: >
+              Use blocking I/O. Defaults to true. Set
+              false for async Tokio mode.
+          type:
+            type_id: bool
+          required: false
+        warmup_iterations:
+          display:
+            name: Warmup Iterations
+            description: Warmup messages before measurement.
+          type:
+            type_id: integer
+            min: 0
+          required: false
+        one_way:
+          display:
+            name: One-Way Test
+            description: Run one-way latency tests only.
+          type:
+            type_id: bool
+          required: false
+        round_trip:
+          display:
+            name: Round-Trip Test
+            description: Run round-trip latency tests only.
+          type:
+            type_id: bool
+          required: false
+        send_delay:
+          display:
+            name: Send Delay
+            description: >
+              Delay between sends, e.g. '1ms', '50us'.
+              Useful for latency-focused testing under
+              controlled load.
+          type:
+            type_id: string
+          required: false
+        server_affinity:
+          display:
+            name: Server CPU Affinity
+            description: >
+              Pin receiver process to this CPU core.
+          type:
+            type_id: integer
+            min: 0
+          required: false
+        client_affinity:
+          display:
+            name: Client CPU Affinity
+            description: >
+              Pin sender process to this CPU core.
+          type:
+            type_id: integer
+            min: 0
+          required: false
+        shm_direct:
+          display:
+            name: SHM Direct Memory
+            description: >
+              High-performance direct memory shared memory.
+              Auto-enables blocking. Unix only, 8KB max
+              payload.
+          type:
+            type_id: bool
+          required: false
+        continue_on_error:
+          display:
+            name: Continue on Error
+            description: >
+              Continue if a mechanism fails.
+          type:
+            type_id: bool
+          required: false
+        quiet:
+          display:
+            name: Quiet Mode
+            description: Silence console output.
+          type:
+            type_id: bool
+          required: false
+
+steps:
+  benchmark:
+    plugin:
+      deployment_type: image
+      src: localhost/arcaflow-plugin-rusty-comms:latest
+    step: run-benchmark
+    input:
+      tests: !expr $.input.tests
+
+outputs:
+  success:
+    benchmark_result: !expr $.steps.benchmark.outputs.success
+  error:
+    benchmark_error: !expr $.steps.benchmark.outputs.error

@@ -1,113 +1,180 @@
 # Arcaflow Plugin: rusty-comms IPC Benchmark
 
-An [Arcaflow](https://arcalot.io/arcaflow/) plugin that wraps the
+An [Arcaflow](https://arcalot.io/arcaflow) plugin that wraps the
 [rusty-comms](https://github.com/redhat-performance/rusty-comms) IPC
-benchmark suite. It executes the `ipc-benchmark` binary inside a
-container and returns strongly-typed latency and throughput results
-suitable for automated workflows.
+benchmark suite. It executes the `ipc-benchmark` binary, parses the
+structured JSON output, and returns strongly-typed latency and
+throughput results to the Arcaflow engine.
 
 ## Supported IPC Mechanisms
 
-| Mechanism | CLI value | Description |
-|-----------|-----------|-------------|
-| Unix Domain Sockets | `uds` | High-performance local communication |
-| Shared Memory | `shm` | Direct memory with ring buffers |
-| TCP Sockets | `tcp` | Network-capable communication |
-| POSIX Message Queues | `pmq` | Kernel-managed messaging (Linux) |
-| All | `all` | Test every available mechanism |
+| Mechanism | CLI Name | Description |
+|-----------|----------|-------------|
+| Unix Domain Socket | `uds` | Local inter-process socket |
+| TCP Socket | `tcp` | TCP loopback socket |
+| Shared Memory | `shm` | POSIX shared memory (with optional direct mode) |
+| POSIX Message Queue | `pmq` | Kernel-managed message queue |
 
-## Quick Start
+Use `all` to benchmark every mechanism in a single run.
 
-### Build the container image
+## Building the Container Image
 
-```bash
-docker build -t arcaflow-plugin-rusty-comms .
-```
-
-### Run standalone
+The plugin ships as a multi-stage container image that compiles
+`ipc-benchmark` from source (Rust) and bundles it with the Python
+plugin code.
 
 ```bash
-cat inputs/example.yaml | \
-  docker run -i --rm arcaflow-plugin-rusty-comms -f -
+podman build -t arcaflow-plugin-rusty-comms .
 ```
 
-### Run with Arcaflow
+## Running with Arcaflow
 
-Reference this plugin in your workflow:
+### Prerequisites
+
+- [Arcaflow engine](https://github.com/arcalot/arcaflow-engine/releases)
+  binary (or built from source)
+- A container runtime: Podman (default) or Docker
+
+### Quick Start
+
+1. Build the container image (see above).
+
+2. Create an input file (or use `inputs/example.yaml`):
 
 ```yaml
-steps:
-  benchmark:
-    plugin:
-      deployment_type: image
-      src: arcaflow-plugin-rusty-comms:latest
-    input:
-      mechanisms:
-        - uds
-        - tcp
-      message_size: 4096
-      msg_count: 50000
+tests:
+  - mechanisms:
+      - uds
+    message_size: 1024
+    msg_count: 10000
 ```
 
-## Step: `run-benchmark`
+3. Run the workflow:
 
-### Input
+```bash
+arcaflow --input inputs/example.yaml \
+         --config config.yaml \
+         --workflow workflow.yaml
+```
+
+The engine deploys the plugin container, runs the benchmark, and
+prints the structured results to stdout.
+
+### Pre-built Test Suites
+
+Two test input files are included for comprehensive benchmarking:
+
+- **`quick-rusty-comms-arcaflow-testing.yaml`** — A small set of
+  tests across UDS, TCP, PMQ, and SHM for quick validation.
+- **`comprehensive-rusty-comms-arcaflow-testing.yaml`** — A full
+  benchmark matrix covering multiple mechanisms, message sizes,
+  blocking/async modes, concurrency levels, one-way vs round-trip,
+  and send-delay latency profiling.
+
+Example:
+
+```bash
+arcaflow --input comprehensive-rusty-comms-arcaflow-testing.yaml \
+         --config config.yaml
+```
+
+## Input Parameters
+
+Each test run in the `tests` list accepts the following parameters:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `mechanisms` | list of enum | **yes** | IPC mechanisms to test |
-| `message_size` | int | no | Payload size in bytes |
-| `msg_count` | int | no | Number of messages to send |
-| `duration` | string | no | Test duration, e.g. `30s` |
-| `concurrency` | int | no | Concurrent workers |
-| `blocking` | bool | no | Use blocking I/O mode |
-| `buffer_size` | int | no | Internal buffer size |
-| `warmup_iterations` | int | no | Warmup messages |
-| `percentiles` | list of float | no | Percentile levels |
-| `one_way` | bool | no | Enable one-way tests |
-| `round_trip` | bool | no | Enable round-trip tests |
-| `send_delay` | string | no | Delay between sends |
-| `server_affinity` | int | no | Pin receiver to CPU core |
-| `client_affinity` | int | no | Pin sender to CPU core |
-| `shm_direct` | bool | no | Direct memory SHM mode |
-| `continue_on_error` | bool | no | Continue on failure |
-| `include_first_message` | bool | no | Include canary message |
-| `host` | string | no | TCP host address |
-| `port` | int | no | TCP port |
-| `pmq_priority` | int | no | PMQ message priority |
-| `quiet` | bool | no | Silence console output |
-| `extra_args` | list of string | no | Additional CLI flags |
+| `mechanisms` | list of enum | Yes | IPC mechanisms to test (`uds`, `shm`, `tcp`, `pmq`, `all`) |
+| `message_size` | int | No | Message payload size in bytes |
+| `msg_count` | int | No | Number of messages to send |
+| `duration` | string | No | Fixed duration (e.g. `30s`, `5m`); overrides `msg_count` |
+| `concurrency` | int | No | Number of concurrent workers |
+| `blocking` | bool | No | Use blocking I/O (default: true); set `false` for async |
+| `buffer_size` | int | No | Internal buffer size in bytes |
+| `warmup_iterations` | int | No | Warmup messages before measurement |
+| `percentiles` | list of float | No | Percentile levels to compute |
+| `one_way` | bool | No | Run one-way latency tests only |
+| `round_trip` | bool | No | Run round-trip latency tests only |
+| `send_delay` | string | No | Delay between sends (e.g. `1ms`, `50us`) |
+| `server_affinity` | int | No | Pin receiver to a CPU core |
+| `client_affinity` | int | No | Pin sender to a CPU core |
+| `shm_direct` | bool | No | Use direct memory SHM (8KB max, auto-enables blocking) |
+| `continue_on_error` | bool | No | Continue if a mechanism fails |
+| `quiet` | bool | No | Silence console output |
+| `extra_args` | list of string | No | Additional CLI flags for `ipc-benchmark` |
 
-### Outputs
+## Output Schema
 
-**`success`** - Returns the complete benchmark results including:
+On success, the plugin returns:
 
-- `metadata` - Version, timestamp, system information
-- `results` - Per-mechanism results with latency metrics (percentiles,
-  min/max/mean/median/stddev), throughput metrics (messages/sec, bytes/sec),
-  and summary statistics
-- `summary` - Overall summary with fastest mechanism and lowest latency
-  mechanism
+- **`metadata`** — Version, timestamp, system info (OS, CPU cores,
+  memory, Rust version).
+- **`results`** — Per-mechanism results including:
+  - One-way and round-trip latency (min, max, mean, median, std dev,
+    percentiles)
+  - Throughput (messages/sec, bytes/sec, totals, duration)
+  - Test configuration used
+  - Summary statistics (total messages, bytes, throughput, error count)
+- **`summary`** — Overall summary across all mechanisms with the
+  fastest and lowest-latency mechanism identified.
 
-**`error`** - Returns an error message when the benchmark fails.
+On error, an `ErrorOutput` with a descriptive error message is returned.
+
+## Utilities
+
+The `utils/` directory contains helper scripts for multi-run
+benchmarking and result analysis:
+
+- **`utils/run_benchmarks.sh`** — Builds the container and runs the
+  comprehensive suite N times (default 5), producing an averaged CSV.
+- **`utils/python/run_comprehensive.py`** — Python runner that
+  executes multiple Arcaflow iterations and averages results.
+- **`utils/python/parse_arcaflow_output.py`** — Parses Arcaflow engine
+  output YAML into a CSV summary for analysis.
+
+### Running the Full Benchmark Suite
+
+```bash
+# Run 5 iterations and produce averaged CSV
+./utils/run_benchmarks.sh
+
+# Run 3 iterations
+./utils/run_benchmarks.sh 3
+
+# Parse existing outputs only (skip running)
+./utils/run_benchmarks.sh --skip
+```
+
+Results are written to `utils/out/comprehensive_averaged.csv`.
 
 ## Development
 
-### Local testing
+### Running Tests
+
+From the repository root:
 
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python -m pytest tests/
+PYTHONPATH=arcaflow_plugin_rusty_comms \
+  python -m pytest tests/ -v
 ```
 
-### Run the plugin schema
+Or using unittest directly:
 
 ```bash
-python arcaflow_plugin_rusty_comms/rusty_comms_plugin.py --schema
+cd arcaflow_plugin_rusty_comms
+python -m unittest discover -s ../tests -v
 ```
+
+### Dependencies
+
+Managed with [Poetry](https://python-poetry.org/):
+
+```bash
+poetry install
+```
+
+Runtime dependency: `arcaflow-plugin-sdk >= 0.14.0`
 
 ## License
 
-Apache License 2.0
+Apache License, Version 2.0. See [LICENSE](LICENSE) for details.

@@ -1,0 +1,673 @@
+# Comprehensive IPC Benchmark Suite — Arcaflow Input
+#
+# Converted from comprehensive-rusty-comms-testing.py
+# (standalone tests only, no container-to-container tests).
+#
+# Mechanisms: uds, tcp, shm, pmq
+# Modes: async (blocking: false), blocking, shm-direct
+# Test types: iteration-based (100k) and duration-based (10s)
+# Additional: one-way only, round-trip only, concurrency,
+#             send-delay latency profiling
+#
+# Message sizes:
+#   General (UDS, TCP): 64, 512, 1024, 4096, 8192, 65536
+#   PMQ:                512, 1024, 4096, 8100
+#   SHM blocking/direct: 64, 512, 1024, 4096, 8192 (8KB max)
+#   SHM async:          EXCLUDED — needs bare-metal /dev/shm
+#
+# Container notes:
+#   - SHM async tests set buffer_size to fit in 64MB /dev/shm
+#   - SHM blocking/shm-direct bypass normal SHM buffer
+#   - SHM and PMQ are always in separate test entries to
+#     avoid /dev/shm resource conflicts
+
+tests:
+
+  # =============================================================
+  # ITERATION TESTS (50,000 messages)
+  # =============================================================
+
+  # --- UDS async iter ---
+  - mechanisms: [uds]
+    message_size: 64
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 512
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 1024
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 4096
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 8192
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 65536
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  # --- UDS blocking iter ---
+  - mechanisms: [uds]
+    message_size: 64
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 512
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 1024
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 4096
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 8192
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    message_size: 65536
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  # --- TCP async iter ---
+  - mechanisms: [tcp]
+    message_size: 64
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 512
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 1024
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 4096
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 8192
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 65536
+    msg_count: 100000
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  # --- TCP blocking iter ---
+  - mechanisms: [tcp]
+    message_size: 64
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 512
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 1024
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 4096
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 8192
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 65536
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  # --- SHM async iter ---
+  # REMOVED: SHM async uses Tokio ring buffers that require
+  # more /dev/shm than containers provide (64MB default).
+  # These tests only work on bare-metal hosts.  Run the
+  # original comprehensive-rusty-comms-testing.py with
+  # --standalone-only --mechanisms shm --async-only for
+  # SHM async benchmarks.
+
+  # --- SHM blocking iter (uses shm-direct under the hood) ---
+  # Original script adds --blocking --shm-direct for SHM blocking.
+  # Max payload 8KB, so sizes capped at 8192.
+  - mechanisms: [shm]
+    message_size: 64
+    msg_count: 100000
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 512
+    msg_count: 100000
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 1024
+    msg_count: 100000
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 4096
+    msg_count: 100000
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 8192
+    msg_count: 100000
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  # --- SHM shm-direct only iter ---
+  # REMOVED: Duplicate of SHM blocking iter above.
+  # --shm-direct auto-enables blocking, so "blocking + shm-direct"
+  # and "shm-direct only" produce identical runs.
+
+  # --- PMQ async iter ---
+  # REMOVED: PMQ async uses Tokio runtime which cannot
+  # reliably read from POSIX message queues inside a
+  # container. Fails with "queue consistently empty".
+  # Run on bare metal with the original Python script.
+
+  # --- PMQ blocking iter ---
+  - mechanisms: [pmq]
+    message_size: 512
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 1024
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 4096
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 8100
+    msg_count: 100000
+    warmup_iterations: 100
+    quiet: true
+
+  # =============================================================
+  # DURATION TESTS (10 seconds)
+  # =============================================================
+
+  # --- UDS async dur ---
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 64
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 512
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 1024
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 4096
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 8192
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 65536
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  # --- UDS blocking dur ---
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 64
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 512
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 1024
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 4096
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 8192
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [uds]
+    duration: "10s"
+    message_size: 65536
+    warmup_iterations: 100
+    quiet: true
+
+  # --- TCP async dur ---
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 64
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 512
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 1024
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 4096
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 8192
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 65536
+    blocking: false
+    warmup_iterations: 100
+    quiet: true
+
+  # --- TCP blocking dur ---
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 64
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 512
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 1024
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 4096
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 8192
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    duration: "10s"
+    message_size: 65536
+    warmup_iterations: 100
+    quiet: true
+
+  # --- SHM async dur ---
+  # REMOVED: See SHM async iter comment above.
+
+  # --- SHM blocking dur (uses shm-direct) ---
+  - mechanisms: [shm]
+    duration: "10s"
+    message_size: 64
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    duration: "10s"
+    message_size: 512
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    duration: "10s"
+    message_size: 1024
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    duration: "10s"
+    message_size: 4096
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    duration: "10s"
+    message_size: 8192
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  # --- SHM shm-direct only dur ---
+  # REMOVED: Duplicate of SHM blocking dur above.
+  # See SHM shm-direct only iter comment.
+
+  # --- PMQ async dur ---
+  # REMOVED: See PMQ async iter comment above.
+
+  # --- PMQ blocking dur ---
+  - mechanisms: [pmq]
+    duration: "10s"
+    message_size: 512
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    duration: "10s"
+    message_size: 1024
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    duration: "10s"
+    message_size: 4096
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    duration: "10s"
+    message_size: 8100
+    warmup_iterations: 100
+    quiet: true
+
+  # =============================================================
+  # ONE-WAY ONLY TESTS (max throughput, no round-trip overhead)
+  # 4096 bytes, 100K messages, blocking mode
+  # =============================================================
+
+  - mechanisms: [uds]
+    message_size: 4096
+    msg_count: 100000
+    one_way: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 4096
+    msg_count: 100000
+    one_way: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 4096
+    msg_count: 100000
+    one_way: true
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 4096
+    msg_count: 100000
+    one_way: true
+    warmup_iterations: 100
+    quiet: true
+
+  # =============================================================
+  # ROUND-TRIP ONLY TESTS (pure latency, no one-way phase)
+  # 4096 bytes, 100K messages, blocking mode
+  # =============================================================
+
+  - mechanisms: [uds]
+    message_size: 4096
+    msg_count: 100000
+    round_trip: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 4096
+    msg_count: 100000
+    round_trip: true
+    warmup_iterations: 100
+    quiet: true
+
+  # SHM (shm-direct) only supports one-way; round_trip skipped.
+  # An extra UDS round-trip at 8192 bytes is added instead.
+  - mechanisms: [uds]
+    message_size: 8192
+    msg_count: 100000
+    round_trip: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 4096
+    msg_count: 100000
+    round_trip: true
+    warmup_iterations: 100
+    quiet: true
+
+  # =============================================================
+  # CONCURRENCY TESTS (scaling under parallel load)
+  # 4096 bytes, 100K messages, blocking mode
+  # =============================================================
+
+  # --- concurrency=2 ---
+  - mechanisms: [uds]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 2
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 2
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 2
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 2
+    warmup_iterations: 100
+    quiet: true
+
+  # --- concurrency=4 ---
+  - mechanisms: [uds]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 4
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 4
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 4
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 4096
+    msg_count: 100000
+    concurrency: 4
+    warmup_iterations: 100
+    quiet: true
+
+  # =============================================================
+  # SEND DELAY TESTS (latency under controlled load)
+  # 4096 bytes, 10s duration, 1ms delay between sends
+  # =============================================================
+
+  - mechanisms: [uds]
+    message_size: 4096
+    duration: "10s"
+    send_delay: "1ms"
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [tcp]
+    message_size: 4096
+    duration: "10s"
+    send_delay: "1ms"
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [shm]
+    message_size: 4096
+    duration: "10s"
+    send_delay: "1ms"
+    shm_direct: true
+    warmup_iterations: 100
+    quiet: true
+
+  - mechanisms: [pmq]
+    message_size: 4096
+    duration: "10s"
+    send_delay: "1ms"
+    warmup_iterations: 100
+    quiet: true
