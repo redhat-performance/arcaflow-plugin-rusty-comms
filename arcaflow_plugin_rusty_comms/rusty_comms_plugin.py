@@ -439,7 +439,10 @@ def _kill_process_group(
         proc: The Popen object whose session should be killed.
         test_index: Zero-based index for log messages.
     """
-    pgid = os.getpgid(proc.pid)
+    try:
+        pgid = os.getpgid(proc.pid)
+    except ProcessLookupError:
+        return
     logger.warning(
         "Test %d: Killing process group %d",
         test_index + 1,
