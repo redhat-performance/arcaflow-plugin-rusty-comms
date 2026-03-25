@@ -1,0 +1,140 @@
+# Functionality Coverage Test Suite — Arcaflow Input
+#
+# Exercises every supported parameter at least once across a
+# varied set of test configurations.  Designed to be compact
+# (runs in a few minutes) while covering all plugin features.
+#
+# Parameter coverage per test:
+#   1: mechanisms(uds), blocking=false, msg_count, message_size,
+#      warmup_iterations, percentiles
+#   2: mechanisms(tcp), duration, concurrency, send_delay, host,
+#      port, quiet
+#   3: mechanisms(shm), shm_direct, one_way, server_affinity,
+#      client_affinity, msg_count
+#   4: mechanisms(pmq), round_trip, pmq_priority,
+#      include_first_message, message_size, msg_count
+#   5: mechanisms(uds,tcp), continue_on_error, buffer_size,
+#      duration, quiet
+#   6: mechanisms(all), msg_count, warmup_iterations, quiet,
+#      continue_on_error
+#   7: mechanisms(tcp), blocking=false, one_way, concurrency,
+#      large message_size, msg_count
+#   8: mechanisms(pmq), duration, send_delay, warmup_iterations,
+#      quiet
+#   9: mechanisms(uds), defaults only — no optional params
+#  10: mechanisms(tcp), duration + msg_count together (duration
+#      takes precedence)
+#  11: mechanisms(uds), one_way + round_trip both explicit
+#  12: mechanisms(tcp), minimal 1-byte message_size boundary
+
+tests:
+
+  # --- Test 1: UDS async with custom percentiles ---
+  # Covers: mechanisms, blocking=false, msg_count, message_size,
+  #         warmup_iterations, percentiles
+  - mechanisms: [uds]
+    message_size: 2048
+    msg_count: 5000
+    blocking: false
+    warmup_iterations: 50
+    percentiles: [25.0, 50.0, 75.0, 90.0, 95.0, 99.0, 99.9]
+
+  # --- Test 2: TCP blocking with duration and send delay ---
+  # Covers: mechanisms, duration, concurrency, send_delay,
+  #         host, port, quiet
+  - mechanisms: [tcp]
+    message_size: 512
+    duration: "5s"
+    concurrency: 2
+    send_delay: "500us"
+    host: "127.0.0.1"
+    port: 9876
+    quiet: true
+
+  # --- Test 3: SHM direct with CPU pinning, one-way only ---
+  # Covers: mechanisms, shm_direct, one_way, server_affinity,
+  #         client_affinity, msg_count, message_size
+  - mechanisms: [shm]
+    message_size: 4096
+    msg_count: 10000
+    shm_direct: true
+    one_way: true
+    server_affinity: 0
+    client_affinity: 1
+
+  # --- Test 4: PMQ round-trip with priority ---
+  # Covers: mechanisms, round_trip, pmq_priority,
+  #         include_first_message, message_size, msg_count
+  - mechanisms: [pmq]
+    message_size: 1024
+    msg_count: 5000
+    round_trip: true
+    pmq_priority: 5
+    include_first_message: true
+
+  # --- Test 5: Multi-mechanism with buffer size and resilience ---
+  # Covers: mechanisms(multiple), continue_on_error, buffer_size,
+  #         duration, quiet
+  - mechanisms: [uds, tcp]
+    message_size: 8192
+    duration: "3s"
+    buffer_size: 32768
+    continue_on_error: true
+    quiet: true
+
+  # --- Test 6: All mechanisms quick sweep ---
+  # Covers: mechanisms(all), msg_count, warmup_iterations,
+  #         quiet, continue_on_error
+  - mechanisms: [all]
+    message_size: 256
+    msg_count: 2000
+    warmup_iterations: 25
+    continue_on_error: true
+    quiet: true
+
+  # --- Test 7: TCP async one-way with concurrency ---
+  # Covers: blocking=false, one_way, concurrency,
+  #         large message_size
+  - mechanisms: [tcp]
+    message_size: 65536
+    msg_count: 3000
+    blocking: false
+    one_way: true
+    concurrency: 3
+
+  # --- Test 8: PMQ duration with send delay ---
+  # Covers: duration, send_delay, warmup_iterations, quiet
+  - mechanisms: [pmq]
+    message_size: 4096
+    duration: "5s"
+    send_delay: "2ms"
+    warmup_iterations: 100
+    quiet: true
+
+  # --- Test 9: Defaults only ---
+  # Covers: binary default handling for all omitted parameters
+  - mechanisms: [uds]
+
+  # --- Test 10: Duration + msg_count together ---
+  # Covers: duration precedence over msg_count
+  - mechanisms: [tcp]
+    message_size: 1024
+    msg_count: 50000
+    duration: "3s"
+    quiet: true
+
+  # --- Test 11: Both one_way and round_trip explicit ---
+  # Covers: explicit both-mode vs implicit (omitting both)
+  - mechanisms: [uds]
+    message_size: 2048
+    msg_count: 5000
+    one_way: true
+    round_trip: true
+    quiet: true
+
+  # --- Test 12: Minimal 1-byte message boundary ---
+  # Covers: smallest valid message_size
+  - mechanisms: [tcp]
+    message_size: 1
+    msg_count: 1000
+    quiet: true

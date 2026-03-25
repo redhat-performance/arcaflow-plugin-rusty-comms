@@ -167,12 +167,70 @@ input:
           type:
             type_id: bool
           required: false
+        percentiles:
+          display:
+            name: Percentiles
+            description: >
+              Percentile values to compute, e.g.
+              [50.0, 95.0, 99.0, 99.9].
+          type:
+            type_id: list
+            items:
+              type_id: float
+          required: false
+        include_first_message:
+          display:
+            name: Include First Message
+            description: >
+              Include the first (canary) message in
+              results instead of discarding it.
+          type:
+            type_id: bool
+          required: false
+        host:
+          display:
+            name: TCP Host
+            description: >
+              Host address for TCP socket tests.
+              Default: 127.0.0.1.
+          type:
+            type_id: string
+          required: false
+        port:
+          display:
+            name: TCP Port
+            description: >
+              Port for TCP socket tests. Default: 8080.
+          type:
+            type_id: integer
+            min: 1
+          required: false
+        pmq_priority:
+          display:
+            name: PMQ Priority
+            description: >
+              Message priority for POSIX Message Queues.
+          type:
+            type_id: integer
+            min: 0
+          required: false
         quiet:
           display:
             name: Quiet Mode
             description: Silence console output.
           type:
             type_id: bool
+          required: false
+        extra_args:
+          display:
+            name: Extra Arguments
+            description: >
+              Additional CLI arguments passed directly
+              to the ipc-benchmark binary.
+          type:
+            type_id: list
+            items:
+              type_id: string
           required: false
 
 steps:

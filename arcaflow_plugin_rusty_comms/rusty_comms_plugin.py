@@ -108,8 +108,8 @@ def _build_cli_args(
     if params.warmup_iterations is not None:
         args.extend(["-w", str(params.warmup_iterations)])
     if params.percentiles is not None:
-        args.append("--percentiles")
-        args.extend([str(p) for p in params.percentiles])
+        for p in params.percentiles:
+            args.extend(["--percentiles", str(p)])
     if params.one_way:
         args.append("--one-way")
     if params.round_trip:
