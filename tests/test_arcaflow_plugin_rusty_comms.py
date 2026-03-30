@@ -11,6 +11,7 @@ import unittest
 from unittest import mock
 
 from arcaflow_plugin_sdk import plugin
+from arcaflow_plugin_sdk.schema import ConstraintException
 
 import rusty_comms_plugin
 from rusty_comms_schema import (
@@ -515,11 +516,39 @@ class JSONParsingTest(unittest.TestCase):
         self.assertEqual(mech.total_messages, 10000)
 
     def test_parse_missing_key_raises(self):
-        """Missing required keys should raise an exception."""
+        """Missing required keys should raise ConstraintException."""
         raw = _build_sample_json()
         del raw["metadata"]["version"]
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ConstraintException):
             rusty_comms_plugin._parse_json_output(raw)
+
+    def test_float_to_int_coercion(self):
+        """Float values in int fields should be rounded to int."""
+        raw = _build_sample_json()
+        raw["results"][0]["one_way_results"]["latency"][
+            "mean_ns"
+        ] = 9999.7
+        result = rusty_comms_plugin._parse_json_output(raw)
+        ow = result.results[0].one_way_results
+        self.assertEqual(ow.latency.mean_ns, 10000)
+        self.assertIsInstance(ow.latency.mean_ns, int)
+
+    def test_unknown_keys_stripped(self):
+        """Extra keys not in the schema should be silently ignored."""
+        raw = _build_sample_json()
+        self.assertIn(
+            "histogram_data",
+            raw["results"][0]["one_way_results"]["latency"],
+        )
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertIsInstance(result, SuccessOutput)
+
+    def test_parse_with_extra_top_level_key(self):
+        """Unknown top-level keys should not cause errors."""
+        raw = _build_sample_json()
+        raw["debug_info"] = {"internal": True}
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertIsInstance(result, SuccessOutput)
 
 
 class FunctionalTest(unittest.TestCase):

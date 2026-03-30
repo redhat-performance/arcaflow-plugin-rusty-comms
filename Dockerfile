@@ -3,12 +3,20 @@ ARG package=arcaflow_plugin_rusty_comms
 
 # ---------------------------------------------------------------------------
 # STAGE 0 -- Build rusty-comms from source
+#
+# Uses CentOS Stream 9 to match the arcalot runtime base image, ensuring
+# the compiled binary links against the same glibc version (2.34) that
+# will be available at runtime.
 # ---------------------------------------------------------------------------
-FROM docker.io/library/rust:1.82-slim-bookworm AS rust-builder
+FROM quay.io/centos/centos:stream9 AS rust-builder
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends git pkg-config \
- && rm -rf /var/lib/apt/lists/*
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc git make pkgconf-pkg-config curl \
+ && dnf clean all
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain 1.82.0
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN git clone --depth 1 --branch main \
         https://github.com/redhat-performance/rusty-comms.git \
@@ -20,7 +28,7 @@ RUN cargo build --release
 # ---------------------------------------------------------------------------
 # STAGE 1 -- Build Python module dependencies and run tests
 # ---------------------------------------------------------------------------
-FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-buildbase:0.4.0 AS build
+FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-buildbase:0.5.0 AS build
 ARG package
 
 COPY poetry.lock /app/
@@ -41,7 +49,7 @@ RUN python -m coverage run tests/test_${package}.py \
 # ---------------------------------------------------------------------------
 # STAGE 2 -- Build final plugin image
 # ---------------------------------------------------------------------------
-FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-osbase:0.4.0
+FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-osbase:0.5.0
 ARG package
 
 COPY --from=rust-builder /build/rusty-comms/target/release/ipc-benchmark \

@@ -15,24 +15,26 @@ import sys
 import tempfile
 import typing
 
-from arcaflow_plugin_sdk import plugin
+from arcaflow_plugin_sdk import plugin, schema
+from arcaflow_plugin_sdk.schema import (
+    ConstraintException,
+    IntType,
+    ListType,
+    MapType,
+    ObjectType,
+    RefType,
+    ScopeType,
+)
 
 from rusty_comms_schema import (
     BenchmarkMetadata,
     BenchmarkResult,
-    BenchmarkSummary,
     ErrorOutput,
     InputParams,
-    LatencyMetrics,
     MechanismSummary,
     OverallSummary,
-    PercentileValue,
-    PerformanceMetrics,
     SuccessOutput,
-    SystemInfo,
-    TestConfiguration,
     TestRunConfig,
-    ThroughputMetrics,
 )
 
 logger = logging.getLogger("rusty_comms_plugin")
@@ -76,8 +78,9 @@ def _build_cli_args(
 ) -> typing.List[str]:
     """Translate a TestRunConfig into CLI arguments for ipc-benchmark.
 
-    Blocking mode is enabled by default unless explicitly set
-    to False.
+    The ``blocking`` parameter defaults to ``True`` in the schema,
+    overriding the binary's async default for reproducible results.
+    Pass ``blocking: false`` to use async Tokio mode.
 
     Args:
         params: Validated test run parameters.
@@ -101,7 +104,7 @@ def _build_cli_args(
         args.extend(["-d", params.duration])
     if params.concurrency is not None:
         args.extend(["-c", str(params.concurrency)])
-    if params.blocking is not False:
+    if params.blocking:
         args.append("--blocking")
     if params.buffer_size is not None:
         args.extend(["--buffer-size", str(params.buffer_size)])
@@ -141,203 +144,78 @@ def _build_cli_args(
 
 
 # ---------------------------------------------------------------------------
-# JSON -> dataclass mapping helpers
+# Schema-driven JSON deserialization
 # ---------------------------------------------------------------------------
 
-
-def _parse_percentiles(
-    raw: typing.List[typing.Dict[str, typing.Any]],
-) -> typing.List[PercentileValue]:
-    """Convert raw percentile dicts to PercentileValue instances."""
-    return [
-        PercentileValue(
-            percentile=p["percentile"],
-            value_ns=int(p["value_ns"]),
-        )
-        for p in raw
-    ]
+_success_schema = schema.build_object_schema(SuccessOutput)
 
 
-def _parse_latency(
-    raw: typing.Optional[typing.Dict[str, typing.Any]],
-) -> typing.Optional[LatencyMetrics]:
-    """Convert a raw latency dict to a LatencyMetrics instance."""
-    if raw is None:
+def _normalize_for_schema(
+    data: typing.Any,
+    schema_type: typing.Any,
+) -> typing.Any:
+    """Recursively normalize raw JSON data to match SDK schema types.
+
+    The Arcaflow SDK's ``unserialize`` rejects floats in ``IntType``
+    fields and raises on dict keys absent from the schema.  The Rust
+    ``ipc-benchmark`` binary emits JSON with floats for some integer
+    metrics (e.g. ``mean_ns: 3200.5``) and includes extra keys like
+    ``histogram_data`` that the plugin schema intentionally omits.
+
+    This function walks the raw data in parallel with the built SDK
+    schema and performs two transformations:
+
+    1. **Strips unknown dict keys** — only keys declared in the
+       schema's ``properties`` are kept.
+    2. **Coerces float → int** — for fields the schema declares as
+       ``IntType``, floats are rounded to the nearest integer.
+
+    Args:
+        data: Raw value from ``json.loads`` output.
+        schema_type: The SDK type object describing the expected
+            shape (``ObjectType``, ``IntType``, etc.).
+
+    Returns:
+        A normalized copy of *data* suitable for
+        ``schema_type.unserialize()``.
+    """
+    if data is None:
         return None
-    return LatencyMetrics(
-        latency_type=raw["latency_type"],
-        min_ns=int(raw["min_ns"]),
-        max_ns=int(raw["max_ns"]),
-        mean_ns=int(round(float(raw["mean_ns"]))),
-        median_ns=int(round(float(raw["median_ns"]))),
-        std_dev_ns=int(round(float(raw["std_dev_ns"]))),
-        percentiles=_parse_percentiles(raw.get("percentiles", [])),
-        total_samples=int(raw["total_samples"]),
-    )
 
+    if isinstance(schema_type, (ScopeType, ObjectType, RefType)):
+        if not isinstance(data, dict):
+            return data
+        props = schema_type.properties
+        normalized: typing.Dict[str, typing.Any] = {}
+        for prop_id, prop in props.items():
+            if prop_id in data:
+                normalized[prop_id] = _normalize_for_schema(
+                    data[prop_id], prop.type
+                )
+        return normalized
 
-def _parse_throughput(
-    raw: typing.Dict[str, typing.Any],
-) -> ThroughputMetrics:
-    """Convert a raw throughput dict to a ThroughputMetrics instance."""
-    return ThroughputMetrics(
-        messages_per_second=int(round(float(raw["messages_per_second"]))),
-        bytes_per_second=int(round(float(raw["bytes_per_second"]))),
-        total_messages=int(raw["total_messages"]),
-        total_bytes=int(raw["total_bytes"]),
-        duration_ns=int(raw["duration_ns"]),
-    )
+    if isinstance(schema_type, ListType):
+        if not isinstance(data, list):
+            return data
+        return [
+            _normalize_for_schema(item, schema_type.items)
+            for item in data
+        ]
 
+    if isinstance(schema_type, MapType):
+        if not isinstance(data, dict):
+            return data
+        return {
+            k: _normalize_for_schema(v, schema_type.values)
+            for k, v in data.items()
+        }
 
-def _parse_performance(
-    raw: typing.Optional[typing.Dict[str, typing.Any]],
-) -> typing.Optional[PerformanceMetrics]:
-    """Convert raw performance metrics to a PerformanceMetrics instance."""
-    if raw is None:
-        return None
-    return PerformanceMetrics(
-        latency=_parse_latency(raw.get("latency")),
-        throughput=_parse_throughput(raw["throughput"]),
-        timestamp=str(raw.get("timestamp", "")),
-    )
+    if isinstance(schema_type, IntType):
+        if isinstance(data, float):
+            return int(round(data))
+        return data
 
-
-def _parse_system_info(
-    raw: typing.Dict[str, typing.Any],
-) -> SystemInfo:
-    """Convert a raw system_info dict to a SystemInfo instance."""
-    return SystemInfo(
-        os=raw["os"],
-        architecture=raw["architecture"],
-        cpu_cores=int(raw["cpu_cores"]),
-        memory_gb=round(float(raw["memory_gb"]), 1),
-        rust_version=raw["rust_version"],
-        benchmark_version=raw["benchmark_version"],
-    )
-
-
-def _parse_test_config(
-    raw: typing.Dict[str, typing.Any],
-) -> TestConfiguration:
-    """Convert a raw test_config dict to a TestConfiguration instance."""
-    return TestConfiguration(
-        message_size=int(raw["message_size"]),
-        buffer_size=int(raw["buffer_size"]),
-        concurrency=int(raw["concurrency"]),
-        msg_count=(
-            int(raw["msg_count"]) if raw.get("msg_count") is not None
-            else None
-        ),
-        duration=raw.get("duration"),
-        one_way_enabled=bool(raw["one_way_enabled"]),
-        round_trip_enabled=bool(raw["round_trip_enabled"]),
-        warmup_iterations=int(raw["warmup_iterations"]),
-        percentiles=[float(p) for p in raw["percentiles"]],
-    )
-
-
-def _parse_benchmark_summary(
-    raw: typing.Dict[str, typing.Any],
-) -> BenchmarkSummary:
-    """Convert a raw summary dict to a BenchmarkSummary instance."""
-    return BenchmarkSummary(
-        total_messages_sent=int(raw["total_messages_sent"]),
-        total_bytes_transferred=int(raw["total_bytes_transferred"]),
-        average_throughput_mbps=round(
-            float(raw["average_throughput_mbps"]), 1
-        ),
-        peak_throughput_mbps=round(
-            float(raw["peak_throughput_mbps"]), 1
-        ),
-        error_count=int(raw["error_count"]),
-        average_latency_ns=(
-            int(round(float(raw["average_latency_ns"])))
-            if raw.get("average_latency_ns") is not None
-            else None
-        ),
-        min_latency_ns=(
-            int(raw["min_latency_ns"])
-            if raw.get("min_latency_ns") is not None
-            else None
-        ),
-        max_latency_ns=(
-            int(raw["max_latency_ns"])
-            if raw.get("max_latency_ns") is not None
-            else None
-        ),
-        p95_latency_ns=(
-            int(raw["p95_latency_ns"])
-            if raw.get("p95_latency_ns") is not None
-            else None
-        ),
-        p99_latency_ns=(
-            int(raw["p99_latency_ns"])
-            if raw.get("p99_latency_ns") is not None
-            else None
-        ),
-    )
-
-
-def _parse_result(
-    raw: typing.Dict[str, typing.Any],
-) -> BenchmarkResult:
-    """Convert a raw per-mechanism result dict to BenchmarkResult."""
-    return BenchmarkResult(
-        mechanism=str(raw["mechanism"]),
-        status=raw["status"],
-        test_config=_parse_test_config(raw["test_config"]),
-        summary=_parse_benchmark_summary(raw["summary"]),
-        timestamp=str(raw["timestamp"]),
-        test_duration=raw["test_duration"],
-        system_info=_parse_system_info(raw["system_info"]),
-        one_way_results=_parse_performance(
-            raw.get("one_way_results")
-        ),
-        round_trip_results=_parse_performance(
-            raw.get("round_trip_results")
-        ),
-    )
-
-
-def _parse_mechanism_summary(
-    raw: typing.Dict[str, typing.Any],
-) -> MechanismSummary:
-    """Convert a raw mechanism summary dict."""
-    return MechanismSummary(
-        mechanism=str(raw["mechanism"]),
-        average_throughput_mbps=round(
-            float(raw["average_throughput_mbps"]), 1
-        ),
-        total_messages=int(raw["total_messages"]),
-        p95_latency_ns=(
-            int(raw["p95_latency_ns"])
-            if raw.get("p95_latency_ns") is not None
-            else None
-        ),
-        p99_latency_ns=(
-            int(raw["p99_latency_ns"])
-            if raw.get("p99_latency_ns") is not None
-            else None
-        ),
-    )
-
-
-def _parse_overall_summary(
-    raw: typing.Dict[str, typing.Any],
-) -> OverallSummary:
-    """Convert a raw overall summary dict."""
-    mechanisms = {
-        name: _parse_mechanism_summary(val)
-        for name, val in raw.get("mechanisms", {}).items()
-    }
-    return OverallSummary(
-        total_messages=int(raw["total_messages"]),
-        total_bytes=int(raw["total_bytes"]),
-        total_errors=int(raw["total_errors"]),
-        mechanisms=mechanisms,
-        fastest_mechanism=raw.get("fastest_mechanism"),
-        lowest_latency_mechanism=raw.get("lowest_latency_mechanism"),
-    )
+    return data
 
 
 def _parse_json_output(
@@ -345,29 +223,73 @@ def _parse_json_output(
 ) -> SuccessOutput:
     """Parse the complete FinalBenchmarkResults JSON into SuccessOutput.
 
+    The Rust binary serializes its ``Status`` enum as either the
+    string ``"Success"`` or the dict ``{"Failure": "reason"}``.
+    This function normalizes that into two typed fields
+    (``status`` and ``failure_reason``) before handing off to
+    the SDK's ``unserialize`` for validated dataclass construction.
+
     Args:
         raw: Parsed JSON dict from the ipc-benchmark output file.
 
     Returns:
         Populated SuccessOutput dataclass.
+
+    Raises:
+        ConstraintException: If the JSON structure does not
+            conform to the SuccessOutput schema after
+            normalization.
     """
-    meta_raw = raw["metadata"]
-    metadata = BenchmarkMetadata(
-        version=meta_raw["version"],
-        timestamp=str(meta_raw["timestamp"]),
-        total_tests=int(meta_raw["total_tests"]),
-        system_info=_parse_system_info(meta_raw["system_info"]),
-    )
+    for result in raw.get("results", []):
+        status = result.get("status")
+        if isinstance(status, dict) and "Failure" in status:
+            result["status"] = "Failure"
+            result["failure_reason"] = status["Failure"]
+        elif isinstance(status, str):
+            result["failure_reason"] = None
+        else:
+            result["status"] = str(status)
+            result["failure_reason"] = None
 
-    results = [_parse_result(r) for r in raw["results"]]
+    normalized = _normalize_for_schema(raw, _success_schema)
+    return _success_schema.unserialize(normalized)
 
-    summary = _parse_overall_summary(raw["summary"])
 
-    return SuccessOutput(
-        metadata=metadata,
-        results=results,
-        summary=summary,
-    )
+# ---------------------------------------------------------------------------
+# SIGTERM forwarding to child process groups
+# ---------------------------------------------------------------------------
+
+_active_child: typing.Optional[subprocess.Popen] = None
+
+
+def _sigterm_handler(signum: int, frame: typing.Any) -> None:
+    """Forward SIGTERM to the active child's process group.
+
+    The Arcaflow engine sends SIGTERM to the plugin when shutting
+    down.  Python's default handler (``SIG_DFL``) terminates the
+    process immediately without running ``finally`` blocks, which
+    would orphan any running ``ipc-benchmark`` process group
+    started with ``start_new_session=True``.
+
+    This handler sends SIGTERM to the child's process group
+    before re-raising SIGTERM with the default handler so the
+    plugin exits with the correct signal status.
+
+    Note: This handler intentionally avoids logging and blocking
+    waits to remain async-signal-safe.
+    """
+    proc = _active_child
+    if proc is not None:
+        try:
+            pgid = os.getpgid(proc.pid)
+            os.killpg(pgid, signal.SIGTERM)
+        except (ProcessLookupError, OSError):
+            pass
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
+    os.kill(os.getpid(), signal.SIGTERM)
+
+
+signal.signal(signal.SIGTERM, _sigterm_handler)
 
 
 # ---------------------------------------------------------------------------
@@ -401,6 +323,7 @@ def _run_subprocess(
         subprocess.TimeoutExpired: If the timeout elapses.
         OSError: If the binary cannot be executed.
     """
+    global _active_child
     proc = subprocess.Popen(
         cmd,
         stdin=subprocess.DEVNULL,
@@ -409,6 +332,7 @@ def _run_subprocess(
         text=True,
         start_new_session=True,
     )
+    _active_child = proc
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -417,6 +341,7 @@ def _run_subprocess(
     finally:
         if proc.poll() is None:
             _kill_process_group(proc, test_index)
+        _active_child = None
 
     return subprocess.CompletedProcess(
         args=cmd,
@@ -521,13 +446,18 @@ def _run_single_test(
             " ".join(cmd),
         )
 
+        timeout = (
+            test_config.timeout
+            if test_config.timeout is not None
+            else 3600
+        )
         try:
-            result = _run_subprocess(cmd, test_index)
+            result = _run_subprocess(cmd, test_index, timeout)
         except subprocess.TimeoutExpired:
             return "error", ErrorOutput(
                 error=(
                     f"Test {test_index + 1} timed out after"
-                    f" 3600 seconds."
+                    f" {timeout} seconds."
                 )
             )
         except OSError as exc:
@@ -574,7 +504,9 @@ def _run_single_test(
 
         try:
             output = _parse_json_output(raw_json)
-        except (KeyError, TypeError, ValueError) as exc:
+        except (
+            KeyError, TypeError, ValueError, ConstraintException,
+        ) as exc:
             return "error", ErrorOutput(
                 error=(
                     f"Test {test_index + 1}: Failed to parse"
@@ -587,6 +519,18 @@ def _run_single_test(
     return "success", output
 
 
+def _min_optional(
+    a: typing.Optional[int],
+    b: typing.Optional[int],
+) -> typing.Optional[int]:
+    """Return the minimum of two optional ints, ignoring Nones."""
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return min(a, b)
+
+
 def _merge_outputs(
     outputs: typing.List[SuccessOutput],
 ) -> SuccessOutput:
@@ -594,6 +538,13 @@ def _merge_outputs(
 
     Uses the metadata from the first run, concatenates all
     per-mechanism results, and combines the overall summaries.
+
+    When multiple runs benchmark the same mechanism (e.g. UDS
+    with different message sizes), their summaries are aggregated:
+    total messages are summed, the best throughput is kept, and
+    the best (lowest) latencies are kept.  The fastest and
+    lowest-latency winners are derived from the final merged
+    mechanism data to avoid inconsistencies.
 
     Args:
         outputs: List of successful test run outputs.
@@ -607,39 +558,61 @@ def _merge_outputs(
     total_bytes = 0
     total_errors = 0
     all_mechanisms: typing.Dict[str, MechanismSummary] = {}
-    fastest_mechanism = None
-    fastest_throughput = 0.0
-    lowest_latency_mechanism = None
-    lowest_latency = float("inf")
 
     for out in outputs:
         all_results.extend(out.results)
         total_messages += out.summary.total_messages
         total_bytes += out.summary.total_bytes
         total_errors += out.summary.total_errors
-        all_mechanisms.update(out.summary.mechanisms)
 
-        if (
-            out.summary.fastest_mechanism
-            and out.summary.mechanisms
-        ):
-            key = out.summary.fastest_mechanism
-            if key in out.summary.mechanisms:
-                tp = out.summary.mechanisms[key].average_throughput_mbps
-                if tp > fastest_throughput:
-                    fastest_throughput = tp
-                    fastest_mechanism = key
+        for name, mech in out.summary.mechanisms.items():
+            if name not in all_mechanisms:
+                all_mechanisms[name] = MechanismSummary(
+                    mechanism=mech.mechanism,
+                    average_throughput_mbps=(
+                        mech.average_throughput_mbps
+                    ),
+                    total_messages=mech.total_messages,
+                    p95_latency_ns=mech.p95_latency_ns,
+                    p99_latency_ns=mech.p99_latency_ns,
+                )
+            else:
+                existing = all_mechanisms[name]
+                all_mechanisms[name] = MechanismSummary(
+                    mechanism=existing.mechanism,
+                    average_throughput_mbps=max(
+                        existing.average_throughput_mbps,
+                        mech.average_throughput_mbps,
+                    ),
+                    total_messages=(
+                        existing.total_messages
+                        + mech.total_messages
+                    ),
+                    p95_latency_ns=_min_optional(
+                        existing.p95_latency_ns,
+                        mech.p95_latency_ns,
+                    ),
+                    p99_latency_ns=_min_optional(
+                        existing.p99_latency_ns,
+                        mech.p99_latency_ns,
+                    ),
+                )
 
+    fastest_mechanism = None
+    fastest_throughput = 0.0
+    lowest_latency_mechanism = None
+    lowest_latency = float("inf")
+
+    for name, mech in all_mechanisms.items():
+        if mech.average_throughput_mbps > fastest_throughput:
+            fastest_throughput = mech.average_throughput_mbps
+            fastest_mechanism = name
         if (
-            out.summary.lowest_latency_mechanism
-            and out.summary.mechanisms
+            mech.p95_latency_ns is not None
+            and mech.p95_latency_ns < lowest_latency
         ):
-            key = out.summary.lowest_latency_mechanism
-            if key in out.summary.mechanisms:
-                lat = out.summary.mechanisms[key].p95_latency_ns
-                if lat is not None and lat < lowest_latency:
-                    lowest_latency = lat
-                    lowest_latency_mechanism = key
+            lowest_latency = mech.p95_latency_ns
+            lowest_latency_mechanism = name
 
     merged_summary = OverallSummary(
         total_messages=total_messages,

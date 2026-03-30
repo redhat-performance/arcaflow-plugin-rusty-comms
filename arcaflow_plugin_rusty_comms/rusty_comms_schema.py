@@ -88,10 +88,12 @@ class TestRunConfig:
         typing.Optional[bool],
         schema.name("Blocking Mode"),
         schema.description(
-            "Use blocking I/O. Defaults to true when not"
-            " specified. Set to false for async Tokio mode."
+            "Use blocking I/O. The plugin defaults to blocking"
+            " mode (true) for reproducible benchmark results,"
+            " overriding the binary's async default. Set to"
+            " false explicitly for async Tokio mode."
         ),
-    ] = None
+    ] = True
 
     buffer_size: typing.Annotated[
         typing.Optional[int],
@@ -221,6 +223,18 @@ class TestRunConfig:
         schema.description(
             "Silence informational console output."
         ),
+    ] = None
+
+    timeout: typing.Annotated[
+        typing.Optional[int],
+        schema.name("Timeout"),
+        schema.description(
+            "Maximum seconds to wait for the benchmark to"
+            " complete before killing the process. Default:"
+            " 3600 (1 hour). Increase for large benchmark"
+            " matrices or long-duration tests."
+        ),
+        schema.min(1),
     ] = None
 
     extra_args: typing.Annotated[
@@ -569,10 +583,10 @@ class BenchmarkResult:
     ]
 
     status: typing.Annotated[
-        typing.Any,
+        str,
         schema.name("Status"),
         schema.description(
-            "'Success' or {'Failure': 'reason'}."
+            "Test outcome: 'Success' or 'Failure'."
         ),
     ]
 
@@ -605,6 +619,15 @@ class BenchmarkResult:
         schema.name("System Info"),
         schema.description("System info captured during this test."),
     ]
+
+    failure_reason: typing.Annotated[
+        typing.Optional[str],
+        schema.name("Failure Reason"),
+        schema.description(
+            "Error description when status is 'Failure'."
+            " None when the test succeeded."
+        ),
+    ] = None
 
     one_way_results: typing.Annotated[
         typing.Optional[PerformanceMetrics],
