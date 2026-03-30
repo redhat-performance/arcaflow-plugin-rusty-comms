@@ -11,7 +11,7 @@ ARG package=arcaflow_plugin_rusty_comms
 FROM quay.io/centos/centos:stream9 AS rust-builder
 
 RUN dnf install -y --setopt=install_weak_deps=False \
-        gcc git make pkgconf-pkg-config curl \
+        gcc git make pkgconf-pkg-config \
  && dnf clean all
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
