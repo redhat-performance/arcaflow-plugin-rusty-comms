@@ -16,7 +16,6 @@ Usage:
 import argparse
 import csv
 import logging
-import os
 import subprocess
 import sys
 import time
@@ -25,7 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from parse_arcaflow_output import (
+from parse_arcaflow_output import (  # noqa: E402
     CSV_COLUMNS,
     build_rows,
     extract_yaml_from_output,
