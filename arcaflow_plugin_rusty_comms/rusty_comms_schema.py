@@ -230,12 +230,12 @@ class TestRunConfig:
         schema.name("Timeout"),
         schema.description(
             "Maximum seconds to wait for the benchmark to"
-            " complete before killing the process. Default:"
-            " 3600 (1 hour). Increase for large benchmark"
-            " matrices or long-duration tests."
+            " complete before killing the process. Increase"
+            " for large benchmark matrices or long-duration"
+            " tests."
         ),
         schema.min(1),
-    ] = None
+    ] = 3600
 
     extra_args: typing.Annotated[
         typing.Optional[typing.List[str]],

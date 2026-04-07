@@ -446,18 +446,15 @@ def _run_single_test(
             " ".join(cmd),
         )
 
-        timeout = (
-            test_config.timeout
-            if test_config.timeout is not None
-            else 3600
-        )
         try:
-            result = _run_subprocess(cmd, test_index, timeout)
+            result = _run_subprocess(
+                cmd, test_index, test_config.timeout
+            )
         except subprocess.TimeoutExpired:
             return "error", ErrorOutput(
                 error=(
                     f"Test {test_index + 1} timed out after"
-                    f" {timeout} seconds."
+                    f" {test_config.timeout} seconds."
                 )
             )
         except OSError as exc:
