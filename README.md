@@ -114,7 +114,7 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tbody></table>
         </details><details><summary>TestRunConfig (<code>object</code>)</summary>
             <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>blocking (<code>bool</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Blocking Mode</td></tr><tr><th>Description:</th><td width="500">Use blocking I/O. Defaults to true when not specified. Set to false for async Tokio mode.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
+        <table><tbody><tr><th>Name:</th><td>Blocking Mode</td></tr><tr><th>Description:</th><td width="500">Use blocking I/O. The plugin defaults to blocking mode (true) for reproducible benchmark results, overriding the binary&#39;s async default. Set to false explicitly for async Tokio mode.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Default (JSON encoded):</th><td><pre><code>true</code></pre></td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
 </tbody></table>
         </details><details><summary>buffer_size (<code>int</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Buffer Size</td></tr><tr><th>Description:</th><td width="500">Internal buffer size in bytes for message queues and shared memory.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
@@ -208,6 +208,10 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         </details><details><summary>shm_direct (<code>bool</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>SHM Direct Memory</td></tr><tr><th>Description:</th><td width="500">Use high-performance direct memory shared memory. Auto-enables blocking mode. Unix only, 8KB max payload.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
 </tbody></table>
+        </details><details><summary>timeout (<code>int</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Timeout</td></tr><tr><th>Description:</th><td width="500">Maximum seconds to wait for the benchmark to complete before killing the process. Increase for large benchmark matrices or long-duration tests.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Default (JSON encoded):</th><td><pre><code>3600</code></pre></td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
+</tr>
+</tbody></table>
         </details><details><summary>warmup_iterations (<code>int</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Warmup Iterations</td></tr><tr><th>Description:</th><td width="500">Number of warmup messages before measurement starts.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>0</td></tr>
 </tr>
@@ -279,7 +283,10 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tr>
 </tbody></table>
         </details><details><summary>BenchmarkResult (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>input_blocking (<code>bool</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>failure_reason (<code>string</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Failure Reason</td></tr><tr><th>Description:</th><td width="500">Error description when status is &#39;Failure&#39;. None when the test succeeded.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
+</tbody></table>
+        </details><details><summary>input_blocking (<code>bool</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Input: Blocking</td></tr><tr><th>Description:</th><td width="500">Original blocking flag from the test input. True = blocking, False = async, None = default.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
 </tbody></table>
         </details><details><summary>input_concurrency (<code>int</code>)</summary>
@@ -307,8 +314,8 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         </details><details><summary>round_trip_results (<code>reference[PerformanceMetrics]</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Round-Trip Results</td></tr><tr><th>Description:</th><td width="500">Round-trip latency/throughput results.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[PerformanceMetrics]</code></td><tr><th>Referenced object:</th><td>PerformanceMetrics</td></tr></tr>
 </tbody></table>
-        </details><details><summary>status (<code>any</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Status</td></tr><tr><th>Description:</th><td width="500">&#39;Success&#39; or {&#39;Failure&#39;: &#39;reason&#39;}.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>any</code></td></tr>
+        </details><details><summary>status (<code>string</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Status</td></tr><tr><th>Description:</th><td width="500">Test outcome: &#39;Success&#39; or &#39;Failure&#39;.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
 </tbody></table>
         </details><details><summary>summary (<code>reference[BenchmarkSummary]</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Summary</td></tr><tr><th>Description:</th><td width="500">Summary statistics for this mechanism.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>reference[BenchmarkSummary]</code></td><tr><th>Referenced object:</th><td>BenchmarkSummary</td></tr></tr>
