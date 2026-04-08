@@ -18,7 +18,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain 1.82.0
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-ARG CACHE_BUST
+# Fetch the latest commit ref for main; ADD always checks the URL
+# at build time and invalidates the layer cache when it changes.
+ADD https://api.github.com/repos/redhat-performance/rusty-comms/git/refs/heads/main \
+    /tmp/rusty-comms-ref.json
 RUN git clone --depth 1 --branch main \
         https://github.com/redhat-performance/rusty-comms.git \
         /build/rusty-comms
