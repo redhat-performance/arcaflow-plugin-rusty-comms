@@ -72,7 +72,7 @@ WORKDIR /app/${package}
 ENTRYPOINT ["python", "rusty_comms_plugin.py"]
 CMD []
 
-LABEL org.opencontainers.image.source="https://github.com/arcalot/arcaflow-plugin-rusty-comms"
+LABEL org.opencontainers.image.source="https://github.com/redhat-performance/arcaflow-plugin-rusty-comms"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL org.opencontainers.image.vendor="Arcalot project"
 LABEL org.opencontainers.image.authors="Arcalot contributors"

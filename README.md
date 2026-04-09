@@ -704,7 +704,7 @@ Managed with [Poetry](https://python-poetry.org/):
 poetry install
 ```
 
-Runtime dependency: `arcaflow-plugin-sdk >= 0.14.0`
+Runtime dependency: `arcaflow-plugin-sdk >= 0.14.4`
 
 ## License
 

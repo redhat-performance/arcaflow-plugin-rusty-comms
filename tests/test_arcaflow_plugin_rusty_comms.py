@@ -550,6 +550,115 @@ class JSONParsingTest(unittest.TestCase):
         result = rusty_comms_plugin._parse_json_output(raw)
         self.assertIsInstance(result, SuccessOutput)
 
+    def test_parse_failure_status_dict(self):
+        """Rust {'Failure': 'reason'} status should be normalized."""
+        raw = _build_sample_json()
+        raw["results"][0]["status"] = {"Failure": "connection refused"}
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertEqual(result.results[0].status, "Failure")
+        self.assertEqual(
+            result.results[0].failure_reason, "connection refused"
+        )
+
+    def test_parse_success_status_has_no_failure_reason(self):
+        """Successful status should have failure_reason=None."""
+        raw = _build_sample_json()
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertEqual(result.results[0].status, "Success")
+        self.assertIsNone(result.results[0].failure_reason)
+
+
+class MergeOutputsTest(unittest.TestCase):
+    """Verify _merge_outputs aggregation of duplicate mechanisms."""
+
+    def _make_output(
+        self, mechanism_name, throughput, messages, p95, p99,
+    ):
+        """Build a minimal SuccessOutput for merge testing.
+
+        Args:
+            mechanism_name: Display name key for the mechanism.
+            throughput: Average throughput in MB/s.
+            messages: Total messages for this mechanism.
+            p95: P95 latency in nanoseconds (or None).
+            p99: P99 latency in nanoseconds (or None).
+
+        Returns:
+            A SuccessOutput with one mechanism in its summary.
+        """
+        return SuccessOutput(
+            metadata=SAMPLE_METADATA,
+            results=[SAMPLE_RESULT],
+            summary=OverallSummary(
+                total_messages=messages,
+                total_bytes=messages * 1024,
+                total_errors=0,
+                mechanisms={
+                    mechanism_name: MechanismSummary(
+                        mechanism="UnixDomainSocket",
+                        average_throughput_mbps=throughput,
+                        total_messages=messages,
+                        p95_latency_ns=p95,
+                        p99_latency_ns=p99,
+                    )
+                },
+                fastest_mechanism=mechanism_name,
+                lowest_latency_mechanism=mechanism_name,
+            ),
+        )
+
+    def test_duplicate_mechanisms_aggregated(self):
+        """Same mechanism from two runs should be merged, not overwritten."""
+        out1 = self._make_output("UDS", 300.0, 10000, 5000, 8000)
+        out2 = self._make_output("UDS", 250.0, 20000, 4000, 7000)
+        merged = rusty_comms_plugin._merge_outputs([out1, out2])
+
+        mech = merged.summary.mechanisms["UDS"]
+        self.assertEqual(mech.total_messages, 30000)
+        self.assertAlmostEqual(
+            mech.average_throughput_mbps, 300.0,
+        )
+        self.assertEqual(mech.p95_latency_ns, 4000)
+        self.assertEqual(mech.p99_latency_ns, 7000)
+
+    def test_distinct_mechanisms_both_kept(self):
+        """Different mechanisms should both appear in the merged output."""
+        out1 = self._make_output("UDS", 300.0, 10000, 5000, 8000)
+        out2 = self._make_output("TCP", 200.0, 10000, 6000, 9000)
+        merged = rusty_comms_plugin._merge_outputs([out1, out2])
+
+        self.assertIn("UDS", merged.summary.mechanisms)
+        self.assertIn("TCP", merged.summary.mechanisms)
+        self.assertEqual(merged.summary.fastest_mechanism, "UDS")
+        self.assertEqual(
+            merged.summary.lowest_latency_mechanism, "UDS",
+        )
+
+    def test_fastest_derived_from_merged_data(self):
+        """Fastest mechanism should reflect aggregated throughput."""
+        out1 = self._make_output("UDS", 100.0, 10000, 5000, 8000)
+        out2 = self._make_output("TCP", 200.0, 10000, 6000, 9000)
+        out3 = self._make_output("UDS", 300.0, 10000, 4500, 7500)
+        merged = rusty_comms_plugin._merge_outputs(
+            [out1, out2, out3]
+        )
+
+        self.assertEqual(merged.summary.fastest_mechanism, "UDS")
+        uds = merged.summary.mechanisms["UDS"]
+        self.assertAlmostEqual(
+            uds.average_throughput_mbps, 300.0,
+        )
+
+    def test_lowest_latency_with_none_values(self):
+        """None latencies should be ignored when finding the minimum."""
+        out1 = self._make_output("UDS", 300.0, 10000, None, None)
+        out2 = self._make_output("UDS", 250.0, 10000, 5000, 8000)
+        merged = rusty_comms_plugin._merge_outputs([out1, out2])
+
+        mech = merged.summary.mechanisms["UDS"]
+        self.assertEqual(mech.p95_latency_ns, 5000)
+        self.assertEqual(mech.p99_latency_ns, 8000)
+
 
 class FunctionalTest(unittest.TestCase):
     """Functional tests with mocked subprocess execution."""
