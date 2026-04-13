@@ -149,6 +149,10 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         </details><details><summary>include_first_message (<code>bool</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Include First Message</td></tr><tr><th>Description:</th><td width="500">Include the first (canary) message in results instead of discarding it.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
 </tbody></table>
+        </details><details><summary>iterations (<code>int</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Iterations</td></tr><tr><th>Description:</th><td width="500">Number of times to repeat this test configuration. Results from all iterations are collected and statistical aggregates (mean, stddev, min, max) are computed per mechanism. Higher values yield more stable, statistically significant results.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Default (JSON encoded):</th><td><pre><code>5</code></pre></td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
+</tr>
+</tbody></table>
         </details><details><summary>mechanisms (<code>list[<code>enum[string]</code>]</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>IPC Mechanisms</td></tr><tr><th>Description:</th><td width="500">IPC mechanisms to benchmark. Use &#39;all&#39; to test every available mechanism. Valid values: uds, shm, tcp, pmq, all.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>list[<code>enum[string]</code>]</code></td><tr><th>Minimum items:</th><td>1</td></tr><tr><td colspan="2">
     <details>
@@ -249,7 +253,10 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 
 <table><tbody>
 <tr><th>Type:</th><td><code>scope</code></td><tr><th>Root object:</th><td>SuccessOutput</td></tr>
-<tr><th>Properties</th><td><details><summary>metadata (<code>reference[BenchmarkMetadata]</code>)</summary>
+<tr><th>Properties</th><td><details><summary>iteration_aggregates (<code>reference[IterationAggregates]</code>)</summary>
+                <table><tbody><tr><th>Name:</th><td>Iteration Aggregates</td></tr><tr><th>Description:</th><td width="500">Per-mechanism statistical aggregates computed across iterations. Populated when tests are run with iterations &gt; 0. Contains mean, stddev, min, and max for throughput and latency metrics.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[IterationAggregates]</code></td><tr><th>Referenced object:</th><td>IterationAggregates</td></tr></tr>
+</tbody></table>
+            </details><details><summary>metadata (<code>reference[BenchmarkMetadata]</code>)</summary>
                 <table><tbody><tr><th>Name:</th><td>Metadata</td></tr><tr><th>Description:</th><td width="500">Run metadata and system information.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>reference[BenchmarkMetadata]</code></td><tr><th>Referenced object:</th><td>BenchmarkMetadata</td></tr></tr>
 </tbody></table>
             </details><details><summary>results (<code>list[<code>reference[BenchmarkResult]</code>]</code>)</summary>
@@ -394,6 +401,27 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         </details></td></tr>
 </tr>
 </tbody></table>
+        </details><details><summary>IterationAggregates (<code>object</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>mechanisms (<code>map[<code>string</code>,<code>reference[MechanismIterationAggregate]</code>]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Mechanisms</td></tr><tr><th>Description:</th><td width="500">Per-mechanism aggregate statistics keyed by mechanism name.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>map[<code>string</code>,<code>reference[MechanismIterationAggregate]</code>]</code></td><tr><td colspan="2">
+    <details>
+        <summary>Key type</summary>
+        <table><tbody><tr><th>Type:</th><td><code>string</code></td></tr>
+</tbody></table>
+    </details>
+</td></tr>
+<tr><td colspan="2">
+    <details>
+        <summary>Value type</summary>
+        <table><tbody><tr><th>Type:</th><td><code>reference[MechanismIterationAggregate]</code></td><tr><th>Referenced object:</th><td>MechanismIterationAggregate</td></tr></tr>
+</tbody></table>
+    </details>
+</td></tr>
+</tr>
+</tbody></table>
+        </details></td></tr>
+</tr>
+</tbody></table>
         </details><details><summary>LatencyMetrics (<code>object</code>)</summary>
             <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>latency_type (<code>string</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Latency Type</td></tr><tr><th>Description:</th><td width="500">&#39;OneWay&#39; or &#39;RoundTrip&#39;.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
@@ -434,6 +462,29 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         </details></td></tr>
 </tr>
 </tbody></table>
+        </details><details><summary>MechanismIterationAggregate (<code>object</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>iterations_completed (<code>int</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Iterations Completed</td></tr><tr><th>Description:</th><td width="500">Number of iterations that produced results for this mechanism.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
+</tr>
+</tbody></table>
+        </details><details><summary>mean_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Mean Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of mean latency across iterations. None when no latency data was collected.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details><details><summary>mechanism (<code>string</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Mechanism</td></tr><tr><th>Description:</th><td width="500">IPC mechanism enum variant name.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
+</tbody></table>
+        </details><details><summary>p95_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>P95 Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of P95 latency across iterations.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details><details><summary>p99_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>P99 Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of P99 latency across iterations.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details><details><summary>throughput_mbps (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Throughput (MB/s)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of average throughput across iterations.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details></td></tr>
+</tr>
+</tbody></table>
         </details><details><summary>MechanismSummary (<code>object</code>)</summary>
             <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>average_throughput_mbps (<code>float</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Average Throughput (MB/s)</td></tr><tr><th>Description:</th><td width="500">Average throughput for this mechanism.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
@@ -452,6 +503,30 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tbody></table>
         </details><details><summary>total_messages (<code>int</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Total Messages</td></tr><tr><th>Description:</th><td width="500">Total messages for this mechanism.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+</tr>
+</tbody></table>
+        </details></td></tr>
+</tr>
+</tbody></table>
+        </details><details><summary>MetricStatistics (<code>object</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>max_value (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Maximum</td></tr><tr><th>Description:</th><td width="500">Maximum observed value.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
+</tr>
+</tbody></table>
+        </details><details><summary>mean (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Mean</td></tr><tr><th>Description:</th><td width="500">Arithmetic mean across iterations.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
+</tr>
+</tbody></table>
+        </details><details><summary>min_value (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Minimum</td></tr><tr><th>Description:</th><td width="500">Minimum observed value.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
+</tr>
+</tbody></table>
+        </details><details><summary>sample_count (<code>int</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Sample Count</td></tr><tr><th>Description:</th><td width="500">Number of iterations contributing to this statistic.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
+</tr>
+</tbody></table>
+        </details><details><summary>stddev (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Standard Deviation</td></tr><tr><th>Description:</th><td width="500">Sample standard deviation across iterations. Zero when only one iteration was run.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
         </details></td></tr>
@@ -522,7 +597,10 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tr>
 </tbody></table>
         </details><details><summary>SuccessOutput (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>metadata (<code>reference[BenchmarkMetadata]</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>iteration_aggregates (<code>reference[IterationAggregates]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Iteration Aggregates</td></tr><tr><th>Description:</th><td width="500">Per-mechanism statistical aggregates computed across iterations. Populated when tests are run with iterations &gt; 0. Contains mean, stddev, min, and max for throughput and latency metrics.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[IterationAggregates]</code></td><tr><th>Referenced object:</th><td>IterationAggregates</td></tr></tr>
+</tbody></table>
+        </details><details><summary>metadata (<code>reference[BenchmarkMetadata]</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Metadata</td></tr><tr><th>Description:</th><td width="500">Run metadata and system information.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>reference[BenchmarkMetadata]</code></td><tr><th>Referenced object:</th><td>BenchmarkMetadata</td></tr></tr>
 </tbody></table>
         </details><details><summary>results (<code>list[<code>reference[BenchmarkResult]</code>]</code>)</summary>
