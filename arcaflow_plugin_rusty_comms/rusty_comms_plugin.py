@@ -7,6 +7,7 @@ and returns strongly-typed results to the Arcaflow engine.
 
 import json
 import logging
+import math
 import os
 import shutil
 import signal
@@ -31,7 +32,10 @@ from rusty_comms_schema import (
     BenchmarkResult,
     ErrorOutput,
     InputParams,
+    IterationAggregates,
+    MechanismIterationAggregate,
     MechanismSummary,
+    MetricStatistics,
     OverallSummary,
     SuccessOutput,
     TestRunConfig,
@@ -528,6 +532,107 @@ def _min_optional(
     return min(a, b)
 
 
+def _compute_stats(
+    values: typing.List[float],
+) -> MetricStatistics:
+    """Compute descriptive statistics for a list of values.
+
+    Uses sample standard deviation (N-1 denominator) for
+    populations of size > 1.  Returns stddev=0 for a single
+    value.
+
+    Args:
+        values: Non-empty list of numeric values.
+
+    Returns:
+        MetricStatistics with mean, stddev, min, max, and count.
+    """
+    n = len(values)
+    mean = sum(values) / n
+    if n > 1:
+        variance = sum(
+            (v - mean) ** 2 for v in values
+        ) / (n - 1)
+    else:
+        variance = 0.0
+    return MetricStatistics(
+        mean=round(mean, 4),
+        stddev=round(math.sqrt(variance), 4),
+        min_value=float(min(values)),
+        max_value=float(max(values)),
+        sample_count=n,
+    )
+
+
+def _compute_iteration_aggregates(
+    outputs: typing.List[SuccessOutput],
+) -> IterationAggregates:
+    """Compute per-mechanism statistics across iteration results.
+
+    Groups all BenchmarkResult entries by mechanism name and
+    computes statistical summaries of throughput and latency
+    metrics across iterations.  This gives statistical
+    confidence (via stddev) and range information that the
+    simple merge cannot provide.
+
+    Args:
+        outputs: All successful iteration outputs.
+
+    Returns:
+        IterationAggregates with per-mechanism statistics.
+    """
+    mech_summaries: typing.Dict[
+        str, typing.List
+    ] = {}
+    for out in outputs:
+        for result in out.results:
+            mech_summaries.setdefault(
+                result.mechanism, []
+            ).append(result.summary)
+
+    mechanisms: typing.Dict[
+        str, MechanismIterationAggregate
+    ] = {}
+    for name, summaries in mech_summaries.items():
+        throughputs = [
+            s.average_throughput_mbps for s in summaries
+        ]
+        latencies = [
+            float(s.average_latency_ns)
+            for s in summaries
+            if s.average_latency_ns is not None
+        ]
+        p95s = [
+            float(s.p95_latency_ns)
+            for s in summaries
+            if s.p95_latency_ns is not None
+        ]
+        p99s = [
+            float(s.p99_latency_ns)
+            for s in summaries
+            if s.p99_latency_ns is not None
+        ]
+
+        mechanisms[name] = MechanismIterationAggregate(
+            mechanism=name,
+            iterations_completed=len(summaries),
+            throughput_mbps=_compute_stats(throughputs),
+            mean_latency_ns=(
+                _compute_stats(latencies)
+                if latencies
+                else None
+            ),
+            p95_latency_ns=(
+                _compute_stats(p95s) if p95s else None
+            ),
+            p99_latency_ns=(
+                _compute_stats(p99s) if p99s else None
+            ),
+        )
+
+    return IterationAggregates(mechanisms=mechanisms)
+
+
 def _merge_outputs(
     outputs: typing.List[SuccessOutput],
 ) -> SuccessOutput:
@@ -665,16 +770,30 @@ def run_benchmark(
         return "error", ErrorOutput(error=str(exc))
 
     successful_outputs: typing.List[SuccessOutput] = []
+    test_counter = 0
 
     for idx, test_config in enumerate(params.tests):
-        output_id, output_data = _run_single_test(
-            binary, test_config, idx
-        )
-        if output_id == "error":
-            return "error", output_data
-        successful_outputs.append(output_data)
+        iterations = test_config.iterations
+        for iter_num in range(iterations):
+            logger.info(
+                "Test config %d/%d, iteration %d/%d",
+                idx + 1,
+                len(params.tests),
+                iter_num + 1,
+                iterations,
+            )
+            output_id, output_data = _run_single_test(
+                binary, test_config, test_counter
+            )
+            if output_id == "error":
+                return "error", output_data
+            successful_outputs.append(output_data)
+            test_counter += 1
 
     merged = _merge_outputs(successful_outputs)
+    merged.iteration_aggregates = (
+        _compute_iteration_aggregates(successful_outputs)
+    )
     return "success", merged
 
 

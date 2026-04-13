@@ -225,6 +225,19 @@ class TestRunConfig:
         ),
     ] = None
 
+    iterations: typing.Annotated[
+        typing.Optional[int],
+        schema.name("Iterations"),
+        schema.description(
+            "Number of times to repeat this test configuration."
+            " Results from all iterations are collected and"
+            " statistical aggregates (mean, stddev, min, max)"
+            " are computed per mechanism. Higher values yield"
+            " more stable, statistically significant results."
+        ),
+        schema.min(1),
+    ] = 5
+
     timeout: typing.Annotated[
         typing.Optional[int],
         schema.name("Timeout"),
@@ -799,6 +812,140 @@ class OverallSummary:
 
 
 # ---------------------------------------------------------------------------
+# Iteration aggregate dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MetricStatistics:
+    """Statistical summary of a numeric metric across iterations.
+
+    Provides mean, standard deviation, min, and max computed
+    across multiple benchmark iterations of the same mechanism.
+    """
+
+    mean: typing.Annotated[
+        float,
+        schema.name("Mean"),
+        schema.description("Arithmetic mean across iterations."),
+    ]
+
+    stddev: typing.Annotated[
+        float,
+        schema.name("Standard Deviation"),
+        schema.description(
+            "Sample standard deviation across iterations."
+            " Zero when only one iteration was run."
+        ),
+    ]
+
+    min_value: typing.Annotated[
+        float,
+        schema.name("Minimum"),
+        schema.description("Minimum observed value."),
+    ]
+
+    max_value: typing.Annotated[
+        float,
+        schema.name("Maximum"),
+        schema.description("Maximum observed value."),
+    ]
+
+    sample_count: typing.Annotated[
+        int,
+        schema.name("Sample Count"),
+        schema.description(
+            "Number of iterations contributing to this"
+            " statistic."
+        ),
+        schema.min(1),
+    ]
+
+
+@dataclass
+class MechanismIterationAggregate:
+    """Aggregated statistics for one mechanism across iterations.
+
+    Collects throughput and latency metrics from each iteration
+    and computes statistical summaries for stable comparisons.
+    """
+
+    mechanism: typing.Annotated[
+        str,
+        schema.name("Mechanism"),
+        schema.description("IPC mechanism enum variant name."),
+    ]
+
+    iterations_completed: typing.Annotated[
+        int,
+        schema.name("Iterations Completed"),
+        schema.description(
+            "Number of iterations that produced results"
+            " for this mechanism."
+        ),
+        schema.min(1),
+    ]
+
+    throughput_mbps: typing.Annotated[
+        MetricStatistics,
+        schema.name("Throughput (MB/s)"),
+        schema.description(
+            "Statistical summary of average throughput"
+            " across iterations."
+        ),
+    ]
+
+    mean_latency_ns: typing.Annotated[
+        typing.Optional[MetricStatistics],
+        schema.name("Mean Latency (ns)"),
+        schema.description(
+            "Statistical summary of mean latency across"
+            " iterations. None when no latency data was"
+            " collected."
+        ),
+    ] = None
+
+    p95_latency_ns: typing.Annotated[
+        typing.Optional[MetricStatistics],
+        schema.name("P95 Latency (ns)"),
+        schema.description(
+            "Statistical summary of P95 latency across"
+            " iterations."
+        ),
+    ] = None
+
+    p99_latency_ns: typing.Annotated[
+        typing.Optional[MetricStatistics],
+        schema.name("P99 Latency (ns)"),
+        schema.description(
+            "Statistical summary of P99 latency across"
+            " iterations."
+        ),
+    ] = None
+
+
+@dataclass
+class IterationAggregates:
+    """Per-mechanism statistical aggregates across iterations.
+
+    When tests are run for multiple iterations, this structure
+    provides a statistical view of key metrics per mechanism.
+    Each mechanism that appeared in any iteration gets its own
+    aggregate with mean, stddev, min, and max for throughput
+    and latency.
+    """
+
+    mechanisms: typing.Annotated[
+        typing.Dict[str, MechanismIterationAggregate],
+        schema.name("Mechanisms"),
+        schema.description(
+            "Per-mechanism aggregate statistics keyed by"
+            " mechanism name."
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Top-level output dataclasses
 # ---------------------------------------------------------------------------
 
@@ -827,6 +974,18 @@ class SuccessOutput:
         schema.name("Overall Summary"),
         schema.description("Aggregated summary across mechanisms."),
     ]
+
+    iteration_aggregates: typing.Annotated[
+        typing.Optional[IterationAggregates],
+        schema.name("Iteration Aggregates"),
+        schema.description(
+            "Per-mechanism statistical aggregates computed"
+            " across iterations. Populated when tests are"
+            " run with iterations > 0. Contains mean,"
+            " stddev, min, and max for throughput and"
+            " latency metrics."
+        ),
+    ] = None
 
 
 @dataclass
