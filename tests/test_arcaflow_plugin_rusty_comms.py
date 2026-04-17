@@ -23,7 +23,7 @@ from rusty_comms_schema import (
     IterationAggregates,
     LatencyMetrics,
     Mechanism,
-    MechanismIterationAggregate,
+    TestIterationAggregate,
     MechanismSummary,
     MetricStatistics,
     OverallSummary,
@@ -682,9 +682,11 @@ class IterationTest(unittest.TestCase):
     def test_iteration_aggregates_serialization(self):
         """SuccessOutput with iteration_aggregates should serialize."""
         agg = IterationAggregates(
-            mechanisms={
-                "UnixDomainSocket": MechanismIterationAggregate(
+            tests=[
+                TestIterationAggregate(
                     mechanism="UnixDomainSocket",
+                    message_size=1024,
+                    direction="one_way",
                     iterations_completed=3,
                     throughput_mbps=MetricStatistics(
                         mean=300.0,
@@ -694,7 +696,7 @@ class IterationTest(unittest.TestCase):
                         sample_count=3,
                     ),
                 )
-            }
+            ]
         )
         output = SuccessOutput(
             metadata=SAMPLE_METADATA,
@@ -767,6 +769,19 @@ class IterationTest(unittest.TestCase):
             summary=SAMPLE_OVERALL_SUMMARY,
         )
 
+    def _find_test_agg(self, agg, mechanism, msg_size=1024,
+                        direction="one_way"):
+        """Find a TestIterationAggregate by its identity fields."""
+        for t in agg.tests:
+            if (t.mechanism == mechanism
+                    and t.message_size == msg_size
+                    and t.direction == direction):
+                return t
+        self.fail(
+            f"No aggregate for {mechanism}/"
+            f"{msg_size}/{direction}"
+        )
+
     def test_iteration_aggregates_computed(self):
         """Aggregates should reflect statistics across outputs."""
         outputs = [
@@ -777,24 +792,24 @@ class IterationTest(unittest.TestCase):
         agg = rusty_comms_plugin._compute_iteration_aggregates(
             outputs
         )
-        self.assertIn("UnixDomainSocket", agg.mechanisms)
-        mech = agg.mechanisms["UnixDomainSocket"]
-        self.assertEqual(mech.iterations_completed, 3)
+        self.assertEqual(len(agg.tests), 1)
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+        self.assertEqual(t.iterations_completed, 3)
         self.assertAlmostEqual(
-            mech.throughput_mbps.mean, 300.0,
+            t.throughput_mbps.mean, 300.0,
         )
         self.assertEqual(
-            mech.throughput_mbps.min_value, 290.0,
+            t.throughput_mbps.min_value, 290.0,
         )
         self.assertEqual(
-            mech.throughput_mbps.max_value, 310.0,
+            t.throughput_mbps.max_value, 310.0,
         )
-        self.assertIsNotNone(mech.mean_latency_ns)
-        self.assertIsNotNone(mech.p95_latency_ns)
-        self.assertIsNotNone(mech.p99_latency_ns)
+        self.assertIsNotNone(t.mean_latency_ns)
+        self.assertIsNotNone(t.p95_latency_ns)
+        self.assertIsNotNone(t.p99_latency_ns)
 
     def test_aggregates_without_latency(self):
-        """Mechanisms without latency should have None aggregates."""
+        """Tests without latency should have None aggregates."""
         outputs = [
             self._make_output_with_summary(300.0, None),
             self._make_output_with_summary(310.0, None),
@@ -802,11 +817,11 @@ class IterationTest(unittest.TestCase):
         agg = rusty_comms_plugin._compute_iteration_aggregates(
             outputs
         )
-        mech = agg.mechanisms["UnixDomainSocket"]
-        self.assertIsNotNone(mech.throughput_mbps)
-        self.assertIsNone(mech.mean_latency_ns)
-        self.assertIsNone(mech.p95_latency_ns)
-        self.assertIsNone(mech.p99_latency_ns)
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+        self.assertIsNotNone(t.throughput_mbps)
+        self.assertIsNone(t.mean_latency_ns)
+        self.assertIsNone(t.p95_latency_ns)
+        self.assertIsNone(t.p99_latency_ns)
 
     def test_single_iteration_aggregates(self):
         """Single iteration should produce valid aggregates."""
@@ -816,12 +831,12 @@ class IterationTest(unittest.TestCase):
         agg = rusty_comms_plugin._compute_iteration_aggregates(
             outputs
         )
-        mech = agg.mechanisms["UnixDomainSocket"]
-        self.assertEqual(mech.iterations_completed, 1)
-        self.assertEqual(mech.throughput_mbps.stddev, 0.0)
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+        self.assertEqual(t.iterations_completed, 1)
+        self.assertEqual(t.throughput_mbps.stddev, 0.0)
         self.assertEqual(
-            mech.throughput_mbps.min_value,
-            mech.throughput_mbps.max_value,
+            t.throughput_mbps.min_value,
+            t.throughput_mbps.max_value,
         )
 
 
@@ -1035,15 +1050,18 @@ class FunctionalTest(unittest.TestCase):
         self.assertIsNotNone(
             output_data.iteration_aggregates
         )
-        self.assertIn(
-            "UnixDomainSocket",
-            output_data.iteration_aggregates.mechanisms,
+        self.assertGreaterEqual(
+            len(output_data.iteration_aggregates.tests), 1
         )
-        mech_agg = (
-            output_data.iteration_aggregates
-            .mechanisms["UnixDomainSocket"]
+        uds_aggs = [
+            t for t in
+            output_data.iteration_aggregates.tests
+            if t.mechanism == "UnixDomainSocket"
+        ]
+        self.assertEqual(len(uds_aggs), 1)
+        self.assertEqual(
+            uds_aggs[0].iterations_completed, 3
         )
-        self.assertEqual(mech_agg.iterations_completed, 3)
 
 
 if __name__ == "__main__":

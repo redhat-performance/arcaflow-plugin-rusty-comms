@@ -33,7 +33,7 @@ from rusty_comms_schema import (
     ErrorOutput,
     InputParams,
     IterationAggregates,
-    MechanismIterationAggregate,
+    TestIterationAggregate,
     MechanismSummary,
     MetricStatistics,
     OverallSummary,
@@ -564,36 +564,58 @@ def _compute_stats(
     )
 
 
+def _test_config_key(
+    result,
+) -> typing.Tuple[str, int, str]:
+    """Build a composite grouping key from a BenchmarkResult.
+
+    Groups by mechanism, message size, and direction so that
+    distinct tests using the same mechanism are never mixed.
+
+    Returns:
+        (mechanism_name, message_size, direction_label)
+    """
+    cfg = result.test_config
+    if cfg.one_way_enabled:
+        direction = "one_way"
+    elif cfg.round_trip_enabled:
+        direction = "round_trip"
+    else:
+        direction = "default"
+    return (result.mechanism, cfg.message_size, direction)
+
+
 def _compute_iteration_aggregates(
     outputs: typing.List[SuccessOutput],
 ) -> IterationAggregates:
-    """Compute per-mechanism statistics across iteration results.
+    """Compute per-test-configuration stats across iterations.
 
-    Groups all BenchmarkResult entries by mechanism name and
-    computes statistical summaries of throughput and latency
-    metrics across iterations.  This gives statistical
-    confidence (via stddev) and range information that the
-    simple merge cannot provide.
+    Groups BenchmarkResult entries by the full test identity
+    (mechanism + message_size + direction) and computes
+    statistical summaries of throughput and latency metrics.
+    This ensures that distinct tests using the same mechanism
+    are never averaged together.
 
     Args:
         outputs: All successful iteration outputs.
 
     Returns:
-        IterationAggregates with per-mechanism statistics.
+        IterationAggregates with per-test-config statistics.
     """
-    mech_summaries: typing.Dict[
-        str, typing.List
+    grouped: typing.Dict[
+        typing.Tuple[str, int, str], typing.List
     ] = {}
     for out in outputs:
         for result in out.results:
-            mech_summaries.setdefault(
-                result.mechanism, []
-            ).append(result.summary)
+            key = _test_config_key(result)
+            grouped.setdefault(key, []).append(
+                result.summary
+            )
 
-    mechanisms: typing.Dict[
-        str, MechanismIterationAggregate
-    ] = {}
-    for name, summaries in mech_summaries.items():
+    tests: typing.List[TestIterationAggregate] = []
+    for (mech, msg_size, direction), summaries in (
+        grouped.items()
+    ):
         throughputs = [
             s.average_throughput_mbps for s in summaries
         ]
@@ -613,8 +635,10 @@ def _compute_iteration_aggregates(
             if s.p99_latency_ns is not None
         ]
 
-        mechanisms[name] = MechanismIterationAggregate(
-            mechanism=name,
+        tests.append(TestIterationAggregate(
+            mechanism=mech,
+            message_size=msg_size,
+            direction=direction,
             iterations_completed=len(summaries),
             throughput_mbps=_compute_stats(throughputs),
             mean_latency_ns=(
@@ -628,9 +652,9 @@ def _compute_iteration_aggregates(
             p99_latency_ns=(
                 _compute_stats(p99s) if p99s else None
             ),
-        )
+        ))
 
-    return IterationAggregates(mechanisms=mechanisms)
+    return IterationAggregates(tests=tests)
 
 
 def _merge_outputs(

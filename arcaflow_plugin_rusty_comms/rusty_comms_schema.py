@@ -863,11 +863,13 @@ class MetricStatistics:
 
 
 @dataclass
-class MechanismIterationAggregate:
-    """Aggregated statistics for one mechanism across iterations.
+class TestIterationAggregate:
+    """Aggregated statistics for one test configuration across iterations.
 
-    Collects throughput and latency metrics from each iteration
-    and computes statistical summaries for stable comparisons.
+    Groups results by the full test identity (mechanism, message
+    size, and direction) so that distinct tests using the same
+    mechanism are never mixed.  Computes statistical summaries of
+    throughput and latency for stable cross-run comparisons.
     """
 
     mechanism: typing.Annotated[
@@ -876,12 +878,28 @@ class MechanismIterationAggregate:
         schema.description("IPC mechanism enum variant name."),
     ]
 
+    message_size: typing.Annotated[
+        int,
+        schema.name("Message Size"),
+        schema.description(
+            "Payload size in bytes for this test."
+        ),
+    ]
+
+    direction: typing.Annotated[
+        str,
+        schema.name("Direction"),
+        schema.description(
+            "Test direction: 'one_way' or 'round_trip'."
+        ),
+    ]
+
     iterations_completed: typing.Annotated[
         int,
         schema.name("Iterations Completed"),
         schema.description(
             "Number of iterations that produced results"
-            " for this mechanism."
+            " for this test configuration."
         ),
         schema.min(1),
     ]
@@ -926,21 +944,22 @@ class MechanismIterationAggregate:
 
 @dataclass
 class IterationAggregates:
-    """Per-mechanism statistical aggregates across iterations.
+    """Per-test-configuration statistical aggregates across iterations.
 
     When tests are run for multiple iterations, this structure
-    provides a statistical view of key metrics per mechanism.
-    Each mechanism that appeared in any iteration gets its own
-    aggregate with mean, stddev, min, and max for throughput
-    and latency.
+    provides a statistical view of key metrics grouped by the
+    full test identity (mechanism + message size + direction).
+    Each unique test configuration gets its own aggregate with
+    mean, stddev, min, and max for throughput and latency.
     """
 
-    mechanisms: typing.Annotated[
-        typing.Dict[str, MechanismIterationAggregate],
-        schema.name("Mechanisms"),
+    tests: typing.Annotated[
+        typing.List[TestIterationAggregate],
+        schema.name("Tests"),
         schema.description(
-            "Per-mechanism aggregate statistics keyed by"
-            " mechanism name."
+            "Per-test-configuration aggregate statistics."
+            " Each entry represents a unique combination of"
+            " mechanism, message size, and direction."
         ),
     ]
 
