@@ -88,12 +88,11 @@ class TestRunConfig:
         typing.Optional[bool],
         schema.name("Blocking Mode"),
         schema.description(
-            "Use blocking I/O. The plugin defaults to blocking"
-            " mode (true) for reproducible benchmark results,"
-            " overriding the binary's async default. Set to"
-            " false explicitly for async Tokio mode."
+            "Use blocking I/O. When not set, the binary's own"
+            " default applies. Set to true for blocking mode"
+            " or false for async Tokio mode."
         ),
-    ] = True
+    ] = None
 
     buffer_size: typing.Annotated[
         typing.Optional[int],
@@ -232,11 +231,12 @@ class TestRunConfig:
             "Number of times to repeat this test configuration."
             " Results from all iterations are collected and"
             " statistical aggregates (mean, stddev, min, max)"
-            " are computed per mechanism. Higher values yield"
-            " more stable, statistically significant results."
+            " are computed per mechanism. Set to a higher"
+            " value (e.g. 5) for statistically significant"
+            " results."
         ),
         schema.min(1),
-    ] = 5
+    ] = 1
 
     timeout: typing.Annotated[
         typing.Optional[int],
@@ -325,19 +325,19 @@ class LatencyMetrics:
     ]
 
     mean_ns: typing.Annotated[
-        int,
+        float,
         schema.name("Mean (ns)"),
         schema.description("Mean latency in nanoseconds."),
     ]
 
     median_ns: typing.Annotated[
-        int,
+        float,
         schema.name("Median (ns)"),
         schema.description("Median (P50) latency in nanoseconds."),
     ]
 
     std_dev_ns: typing.Annotated[
-        int,
+        float,
         schema.name("Std Dev (ns)"),
         schema.description(
             "Standard deviation of latency in nanoseconds."
@@ -362,13 +362,13 @@ class ThroughputMetrics:
     """Throughput measurements from a benchmark run."""
 
     messages_per_second: typing.Annotated[
-        int,
+        float,
         schema.name("Messages/sec"),
         schema.description("Message transmission rate."),
     ]
 
     bytes_per_second: typing.Annotated[
-        int,
+        float,
         schema.name("Bytes/sec"),
         schema.description("Data transmission rate in bytes per second."),
     ]
@@ -511,7 +511,7 @@ class BenchmarkSummary:
     ]
 
     average_latency_ns: typing.Annotated[
-        typing.Optional[int],
+        typing.Optional[float],
         schema.name("Average Latency (ns)"),
         schema.description("Average latency in nanoseconds."),
     ] = None

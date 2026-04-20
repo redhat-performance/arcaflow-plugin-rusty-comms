@@ -74,7 +74,7 @@ CMD []
 
 LABEL org.opencontainers.image.source="https://github.com/redhat-performance/arcaflow-plugin-rusty-comms"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.vendor="Arcalot project"
-LABEL org.opencontainers.image.authors="Arcalot contributors"
+LABEL org.opencontainers.image.vendor="Red Hat Performance"
+LABEL org.opencontainers.image.authors="Red Hat Performance contributors"
 LABEL org.opencontainers.image.title="Arcaflow rusty-comms IPC Benchmark Plugin"
 LABEL io.github.arcalot.arcaflow.plugin.version="1"

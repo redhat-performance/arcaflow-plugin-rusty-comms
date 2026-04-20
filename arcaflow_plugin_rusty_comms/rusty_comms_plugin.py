@@ -17,15 +17,7 @@ import tempfile
 import typing
 
 from arcaflow_plugin_sdk import plugin, schema
-from arcaflow_plugin_sdk.schema import (
-    ConstraintException,
-    IntType,
-    ListType,
-    MapType,
-    ObjectType,
-    RefType,
-    ScopeType,
-)
+from arcaflow_plugin_sdk.schema import ConstraintException
 
 from rusty_comms_schema import (
     BenchmarkMetadata,
@@ -82,9 +74,9 @@ def _build_cli_args(
 ) -> typing.List[str]:
     """Translate a TestRunConfig into CLI arguments for ipc-benchmark.
 
-    The ``blocking`` parameter defaults to ``True`` in the schema,
-    overriding the binary's async default for reproducible results.
-    Pass ``blocking: false`` to use async Tokio mode.
+    The ``blocking`` flag is only passed to the binary when the
+    user explicitly sets it.  When omitted, the binary's own
+    default behavior applies.
 
     Args:
         params: Validated test run parameters.
@@ -154,72 +146,31 @@ def _build_cli_args(
 _success_schema = schema.build_object_schema(SuccessOutput)
 
 
-def _normalize_for_schema(
-    data: typing.Any,
-    schema_type: typing.Any,
-) -> typing.Any:
-    """Recursively normalize raw JSON data to match SDK schema types.
+def _strip_extra_keys(data: typing.Dict[str, typing.Any]) -> None:
+    """Remove keys the binary emits that the plugin schema omits.
 
-    The Arcaflow SDK's ``unserialize`` rejects floats in ``IntType``
-    fields and raises on dict keys absent from the schema.  The Rust
-    ``ipc-benchmark`` binary emits JSON with floats for some integer
-    metrics (e.g. ``mean_ns: 3200.5``) and includes extra keys like
-    ``histogram_data`` that the plugin schema intentionally omits.
+    The ``ipc-benchmark`` binary includes fields like
+    ``histogram_data`` in its latency output that the plugin
+    schema intentionally does not declare.  The SDK's
+    ``unserialize`` rejects unknown keys, so this function
+    strips them before deserialization.
 
-    This function walks the raw data in parallel with the built SDK
-    schema and performs two transformations:
-
-    1. **Strips unknown dict keys** — only keys declared in the
-       schema's ``properties`` are kept.
-    2. **Coerces float → int** — for fields the schema declares as
-       ``IntType``, floats are rounded to the nearest integer.
+    Operates in-place on the raw JSON dict.
 
     Args:
-        data: Raw value from ``json.loads`` output.
-        schema_type: The SDK type object describing the expected
-            shape (``ObjectType``, ``IntType``, etc.).
-
-    Returns:
-        A normalized copy of *data* suitable for
-        ``schema_type.unserialize()``.
+        data: Parsed JSON dict from the ipc-benchmark output.
     """
-    if data is None:
-        return None
+    for key in list(data.keys()):
+        if key not in ("metadata", "results", "summary"):
+            del data[key]
 
-    if isinstance(schema_type, (ScopeType, ObjectType, RefType)):
-        if not isinstance(data, dict):
-            return data
-        props = schema_type.properties
-        normalized: typing.Dict[str, typing.Any] = {}
-        for prop_id, prop in props.items():
-            if prop_id in data:
-                normalized[prop_id] = _normalize_for_schema(
-                    data[prop_id], prop.type
-                )
-        return normalized
-
-    if isinstance(schema_type, ListType):
-        if not isinstance(data, list):
-            return data
-        return [
-            _normalize_for_schema(item, schema_type.items)
-            for item in data
-        ]
-
-    if isinstance(schema_type, MapType):
-        if not isinstance(data, dict):
-            return data
-        return {
-            k: _normalize_for_schema(v, schema_type.values)
-            for k, v in data.items()
-        }
-
-    if isinstance(schema_type, IntType):
-        if isinstance(data, float):
-            return int(round(data))
-        return data
-
-    return data
+    for result in data.get("results", []):
+        for perf_key in ("one_way_results", "round_trip_results"):
+            perf = result.get(perf_key)
+            if isinstance(perf, dict):
+                lat = perf.get("latency")
+                if isinstance(lat, dict):
+                    lat.pop("histogram_data", None)
 
 
 def _parse_json_output(
@@ -255,8 +206,8 @@ def _parse_json_output(
             result["status"] = str(status)
             result["failure_reason"] = None
 
-    normalized = _normalize_for_schema(raw, _success_schema)
-    return _success_schema.unserialize(normalized)
+    _strip_extra_keys(raw)
+    return _success_schema.unserialize(raw)
 
 
 # ---------------------------------------------------------------------------
