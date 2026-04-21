@@ -356,6 +356,17 @@ class LatencyMetrics:
         schema.description("Number of latency samples collected."),
     ]
 
+    histogram_data: typing.Annotated[
+        typing.List[int],
+        schema.name("Histogram Data"),
+        schema.description(
+            "Raw HDR histogram quantile samples for advanced"
+            " analysis and visualization. Each entry is a"
+            " latency value in nanoseconds from the quantile"
+            " iteration of the underlying HdrHistogram."
+        ),
+    ]
+
 
 @dataclass
 class ThroughputMetrics:

@@ -65,6 +65,7 @@ SAMPLE_LATENCY = LatencyMetrics(
     std_dev_ns=1200.0,
     percentiles=SAMPLE_PERCENTILES,
     total_samples=10000,
+    histogram_data=[100, 200, 300],
 )
 
 SAMPLE_THROUGHPUT = ThroughputMetrics(
@@ -546,8 +547,8 @@ class JSONParsingTest(unittest.TestCase):
         self.assertAlmostEqual(ow.latency.mean_ns, 9999.7)
         self.assertIsInstance(ow.latency.mean_ns, float)
 
-    def test_unknown_keys_stripped(self):
-        """Extra keys not in the schema should be silently ignored."""
+    def test_histogram_data_preserved(self):
+        """histogram_data should be passed through to the output."""
         raw = _build_sample_json()
         self.assertIn(
             "histogram_data",
@@ -555,13 +556,17 @@ class JSONParsingTest(unittest.TestCase):
         )
         result = rusty_comms_plugin._parse_json_output(raw)
         self.assertIsInstance(result, SuccessOutput)
+        ow = result.results[0].one_way_results
+        self.assertEqual(
+            ow.latency.histogram_data, [100, 200, 300]
+        )
 
-    def test_parse_with_extra_top_level_key(self):
-        """Unknown top-level keys should not cause errors."""
+    def test_unknown_top_level_key_rejected(self):
+        """Unknown top-level keys should be rejected by the SDK."""
         raw = _build_sample_json()
         raw["debug_info"] = {"internal": True}
-        result = rusty_comms_plugin._parse_json_output(raw)
-        self.assertIsInstance(result, SuccessOutput)
+        with self.assertRaises(ConstraintException):
+            rusty_comms_plugin._parse_json_output(raw)
 
     def test_parse_failure_status_dict(self):
         """Rust {'Failure': 'reason'} status should be normalized."""

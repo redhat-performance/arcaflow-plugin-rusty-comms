@@ -146,33 +146,6 @@ def _build_cli_args(
 _success_schema = schema.build_object_schema(SuccessOutput)
 
 
-def _strip_extra_keys(data: typing.Dict[str, typing.Any]) -> None:
-    """Remove keys the binary emits that the plugin schema omits.
-
-    The ``ipc-benchmark`` binary includes fields like
-    ``histogram_data`` in its latency output that the plugin
-    schema intentionally does not declare.  The SDK's
-    ``unserialize`` rejects unknown keys, so this function
-    strips them before deserialization.
-
-    Operates in-place on the raw JSON dict.
-
-    Args:
-        data: Parsed JSON dict from the ipc-benchmark output.
-    """
-    for key in list(data.keys()):
-        if key not in ("metadata", "results", "summary"):
-            del data[key]
-
-    for result in data.get("results", []):
-        for perf_key in ("one_way_results", "round_trip_results"):
-            perf = result.get(perf_key)
-            if isinstance(perf, dict):
-                lat = perf.get("latency")
-                if isinstance(lat, dict):
-                    lat.pop("histogram_data", None)
-
-
 def _parse_json_output(
     raw: typing.Dict[str, typing.Any],
 ) -> SuccessOutput:
@@ -206,7 +179,6 @@ def _parse_json_output(
             result["status"] = str(status)
             result["failure_reason"] = None
 
-    _strip_extra_keys(raw)
     return _success_schema.unserialize(raw)
 
 
