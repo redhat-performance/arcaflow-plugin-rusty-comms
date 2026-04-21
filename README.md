@@ -114,7 +114,7 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tbody></table>
         </details><details><summary>TestRunConfig (<code>object</code>)</summary>
             <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>blocking (<code>bool</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Blocking Mode</td></tr><tr><th>Description:</th><td width="500">Use blocking I/O. The plugin defaults to blocking mode (true) for reproducible benchmark results, overriding the binary&#39;s async default. Set to false explicitly for async Tokio mode.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Default (JSON encoded):</th><td><pre><code>true</code></pre></td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
+        <table><tbody><tr><th>Name:</th><td>Blocking Mode</td></tr><tr><th>Description:</th><td width="500">Use blocking I/O. When not set, the binary&#39;s own default applies. Set to true for blocking mode or false for async Tokio mode.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
 </tbody></table>
         </details><details><summary>buffer_size (<code>int</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Buffer Size</td></tr><tr><th>Description:</th><td width="500">Internal buffer size in bytes for message queues and shared memory.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
@@ -150,7 +150,7 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         <table><tbody><tr><th>Name:</th><td>Include First Message</td></tr><tr><th>Description:</th><td width="500">Include the first (canary) message in results instead of discarding it.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>bool</code></td></tr>
 </tbody></table>
         </details><details><summary>iterations (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Iterations</td></tr><tr><th>Description:</th><td width="500">Number of times to repeat this test configuration. Results from all iterations are collected and statistical aggregates (mean, stddev, min, max) are computed per mechanism. Higher values yield more stable, statistically significant results.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Default (JSON encoded):</th><td><pre><code>5</code></pre></td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
+        <table><tbody><tr><th>Name:</th><td>Iterations</td></tr><tr><th>Description:</th><td width="500">Number of times to repeat this test configuration. Results from all iterations are collected and statistical aggregates (mean, stddev, min, max) are computed per mechanism. Set to a higher value (e.g. 5) for statistically significant results.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Default (JSON encoded):</th><td><pre><code>1</code></pre></td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
 </tr>
 </tbody></table>
         </details><details><summary>mechanisms (<code>list[<code>enum[string]</code>]</code>)</summary>
@@ -358,8 +358,8 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tr>
 </tbody></table>
         </details><details><summary>BenchmarkSummary (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>average_latency_ns (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Average Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Average latency in nanoseconds.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>int</code></td>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>average_latency_ns (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Average Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Average latency in nanoseconds.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
         </details><details><summary>average_throughput_mbps (<code>float</code>)</summary>
@@ -402,22 +402,14 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tr>
 </tbody></table>
         </details><details><summary>IterationAggregates (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>mechanisms (<code>map[<code>string</code>,<code>reference[MechanismIterationAggregate]</code>]</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Mechanisms</td></tr><tr><th>Description:</th><td width="500">Per-mechanism aggregate statistics keyed by mechanism name.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>map[<code>string</code>,<code>reference[MechanismIterationAggregate]</code>]</code></td><tr><td colspan="2">
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>tests (<code>list[<code>reference[TestIterationAggregate]</code>]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Tests</td></tr><tr><th>Description:</th><td width="500">Per-test-configuration aggregate statistics. Each entry represents a unique combination of mechanism, message size, and direction.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>list[<code>reference[TestIterationAggregate]</code>]</code></td><tr><td colspan="2">
     <details>
-        <summary>Key type</summary>
-        <table><tbody><tr><th>Type:</th><td><code>string</code></td></tr>
+        <summary>List items</summary>
+        <table><tbody><tr><th>Type:</th><td><code>reference[TestIterationAggregate]</code></td><tr><th>Referenced object:</th><td>TestIterationAggregate</td></tr></tr>
 </tbody></table>
     </details>
-</td></tr>
-<tr><td colspan="2">
-    <details>
-        <summary>Value type</summary>
-        <table><tbody><tr><th>Type:</th><td><code>reference[MechanismIterationAggregate]</code></td><tr><th>Referenced object:</th><td>MechanismIterationAggregate</td></tr></tr>
-</tbody></table>
-    </details>
-</td></tr>
-</tr>
+</td></tr></tr>
 </tbody></table>
         </details></td></tr>
 </tr>
@@ -430,12 +422,12 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         <table><tbody><tr><th>Name:</th><td>Max (ns)</td></tr><tr><th>Description:</th><td width="500">Maximum observed latency in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
 </tr>
 </tbody></table>
-        </details><details><summary>mean_ns (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Mean (ns)</td></tr><tr><th>Description:</th><td width="500">Mean latency in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+        </details><details><summary>mean_ns (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Mean (ns)</td></tr><tr><th>Description:</th><td width="500">Mean latency in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
-        </details><details><summary>median_ns (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Median (ns)</td></tr><tr><th>Description:</th><td width="500">Median (P50) latency in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+        </details><details><summary>median_ns (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Median (ns)</td></tr><tr><th>Description:</th><td width="500">Median (P50) latency in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
         </details><details><summary>min_ns (<code>int</code>)</summary>
@@ -451,36 +443,13 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
     </details>
 </td></tr></tr>
 </tbody></table>
-        </details><details><summary>std_dev_ns (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Std Dev (ns)</td></tr><tr><th>Description:</th><td width="500">Standard deviation of latency in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+        </details><details><summary>std_dev_ns (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Std Dev (ns)</td></tr><tr><th>Description:</th><td width="500">Standard deviation of latency in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
         </details><details><summary>total_samples (<code>int</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Total Samples</td></tr><tr><th>Description:</th><td width="500">Number of latency samples collected.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
 </tr>
-</tbody></table>
-        </details></td></tr>
-</tr>
-</tbody></table>
-        </details><details><summary>MechanismIterationAggregate (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>iterations_completed (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Iterations Completed</td></tr><tr><th>Description:</th><td width="500">Number of iterations that produced results for this mechanism.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
-</tr>
-</tbody></table>
-        </details><details><summary>mean_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Mean Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of mean latency across iterations. None when no latency data was collected.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
-</tbody></table>
-        </details><details><summary>mechanism (<code>string</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Mechanism</td></tr><tr><th>Description:</th><td width="500">IPC mechanism enum variant name.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
-</tbody></table>
-        </details><details><summary>p95_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>P95 Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of P95 latency across iterations.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
-</tbody></table>
-        </details><details><summary>p99_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>P99 Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of P99 latency across iterations.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
-</tbody></table>
-        </details><details><summary>throughput_mbps (<code>reference[MetricStatistics]</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Throughput (MB/s)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of average throughput across iterations.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
 </tbody></table>
         </details></td></tr>
 </tr>
@@ -700,17 +669,47 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         </details></td></tr>
 </tr>
 </tbody></table>
+        </details><details><summary>TestIterationAggregate (<code>object</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>direction (<code>string</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Direction</td></tr><tr><th>Description:</th><td width="500">Test direction: &#39;one_way&#39; or &#39;round_trip&#39;.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
+</tbody></table>
+        </details><details><summary>iterations_completed (<code>int</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Iterations Completed</td></tr><tr><th>Description:</th><td width="500">Number of iterations that produced results for this test configuration.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
+</tr>
+</tbody></table>
+        </details><details><summary>mean_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Mean Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of mean latency across iterations. None when no latency data was collected.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details><details><summary>mechanism (<code>string</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Mechanism</td></tr><tr><th>Description:</th><td width="500">IPC mechanism enum variant name.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
+</tbody></table>
+        </details><details><summary>message_size (<code>int</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Message Size</td></tr><tr><th>Description:</th><td width="500">Payload size in bytes for this test.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+</tr>
+</tbody></table>
+        </details><details><summary>p95_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>P95 Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of P95 latency across iterations.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details><details><summary>p99_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>P99 Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of P99 latency across iterations.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details><details><summary>throughput_mbps (<code>reference[MetricStatistics]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Throughput (MB/s)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of average throughput across iterations.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
+</tbody></table>
+        </details></td></tr>
+</tr>
+</tbody></table>
         </details><details><summary>ThroughputMetrics (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>bytes_per_second (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Bytes/sec</td></tr><tr><th>Description:</th><td width="500">Data transmission rate in bytes per second.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>bytes_per_second (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Bytes/sec</td></tr><tr><th>Description:</th><td width="500">Data transmission rate in bytes per second.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
         </details><details><summary>duration_ns (<code>int</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Duration (ns)</td></tr><tr><th>Description:</th><td width="500">Measurement duration in nanoseconds.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
 </tr>
 </tbody></table>
-        </details><details><summary>messages_per_second (<code>int</code>)</summary>
-        <table><tbody><tr><th>Name:</th><td>Messages/sec</td></tr><tr><th>Description:</th><td width="500">Message transmission rate.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+        </details><details><summary>messages_per_second (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Messages/sec</td></tr><tr><th>Description:</th><td width="500">Message transmission rate.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
         </details><details><summary>total_bytes (<code>int</code>)</summary>
