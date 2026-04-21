@@ -415,7 +415,17 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tr>
 </tbody></table>
         </details><details><summary>LatencyMetrics (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>latency_type (<code>string</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>histogram_data (<code>list[<code>int</code>]</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Histogram Data</td></tr><tr><th>Description:</th><td width="500">Raw HDR histogram quantile samples for advanced analysis and visualization. Each entry is a latency value in nanoseconds from the quantile iteration of the underlying HdrHistogram.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>list[<code>int</code>]</code></td><tr><td colspan="2">
+    <details>
+        <summary>List items</summary>
+        <table><tbody><tr><th>Type:</th><td><code>int</code></td>
+</tr>
+</tbody></table>
+    </details>
+</td></tr></tr>
+</tbody></table>
+        </details><details><summary>latency_type (<code>string</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Latency Type</td></tr><tr><th>Description:</th><td width="500">&#39;OneWay&#39; or &#39;RoundTrip&#39;.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>string</code></td></tr>
 </tbody></table>
         </details><details><summary>max_ns (<code>int</code>)</summary>
