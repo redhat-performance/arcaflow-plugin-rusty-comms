@@ -60,16 +60,16 @@ SAMPLE_LATENCY = LatencyMetrics(
     latency_type="OneWay",
     min_ns=1500,
     max_ns=45000,
-    mean_ns=3201.0,
-    median_ns=3100.0,
-    std_dev_ns=1200.0,
+    mean_ns=3201,
+    median_ns=3100,
+    std_dev_ns=1200,
     percentiles=SAMPLE_PERCENTILES,
     total_samples=10000,
 )
 
 SAMPLE_THROUGHPUT = ThroughputMetrics(
-    messages_per_second=312500.0,
-    bytes_per_second=320000000.0,
+    messages_per_second=312500,
+    bytes_per_second=320000000,
     total_messages=10000,
     total_bytes=10240000,
     duration_ns=32000000,
@@ -99,7 +99,7 @@ SAMPLE_BENCHMARK_SUMMARY = BenchmarkSummary(
     average_throughput_mbps=305.17,
     peak_throughput_mbps=310.0,
     error_count=0,
-    average_latency_ns=3201.0,
+    average_latency_ns=3201,
     min_latency_ns=1500,
     max_latency_ns=45000,
     p95_latency_ns=5200,
@@ -366,19 +366,9 @@ class CLIArgsTest(unittest.TestCase):
         self.assertIn("--output-file", args)
         self.assertIn("/tmp/out.json", args)
 
-    def test_blocking_default_not_passed(self):
-        """Unset blocking should not inject --blocking flag."""
+    def test_blocking_default(self):
+        """Blocking should be enabled by default when not specified."""
         config = TestRunConfig(mechanisms=[Mechanism.uds])
-        args = rusty_comms_plugin._build_cli_args(
-            config, "/tmp/out.json"
-        )
-        self.assertNotIn("--blocking", args)
-
-    def test_blocking_explicit_true(self):
-        """Setting blocking to True should pass --blocking."""
-        config = TestRunConfig(
-            mechanisms=[Mechanism.uds], blocking=True
-        )
         args = rusty_comms_plugin._build_cli_args(
             config, "/tmp/out.json"
         )
@@ -535,16 +525,16 @@ class JSONParsingTest(unittest.TestCase):
         with self.assertRaises(ConstraintException):
             rusty_comms_plugin._parse_json_output(raw)
 
-    def test_float_values_preserved(self):
-        """Float values in float fields should pass through as-is."""
+    def test_float_to_int_coercion(self):
+        """Float values in int fields should be rounded to int."""
         raw = _build_sample_json()
         raw["results"][0]["one_way_results"]["latency"][
             "mean_ns"
         ] = 9999.7
         result = rusty_comms_plugin._parse_json_output(raw)
         ow = result.results[0].one_way_results
-        self.assertAlmostEqual(ow.latency.mean_ns, 9999.7)
-        self.assertIsInstance(ow.latency.mean_ns, float)
+        self.assertEqual(ow.latency.mean_ns, 10000)
+        self.assertIsInstance(ow.latency.mean_ns, int)
 
     def test_unknown_keys_stripped(self):
         """Extra keys not in the schema should be silently ignored."""
@@ -676,10 +666,10 @@ class MergeOutputsTest(unittest.TestCase):
 class IterationTest(unittest.TestCase):
     """Tests for iteration and statistical aggregation."""
 
-    def test_iterations_default_is_one(self):
-        """TestRunConfig iterations should default to 1."""
+    def test_iterations_default_is_five(self):
+        """TestRunConfig iterations should default to 5."""
         config = TestRunConfig(mechanisms=[Mechanism.uds])
-        self.assertEqual(config.iterations, 1)
+        self.assertEqual(config.iterations, 5)
 
     def test_iterations_serialization(self):
         """TestRunConfig with iterations should serialize."""
@@ -749,7 +739,7 @@ class IterationTest(unittest.TestCase):
 
         Args:
             throughput: Average throughput in MB/s.
-            latency: Average latency in ns as float (or None).
+            latency: Average latency in ns (or None).
 
         Returns:
             A SuccessOutput with one UDS mechanism result.
@@ -760,10 +750,7 @@ class IterationTest(unittest.TestCase):
             average_throughput_mbps=throughput,
             peak_throughput_mbps=throughput + 10,
             error_count=0,
-            average_latency_ns=(
-                float(latency) if latency is not None
-                else None
-            ),
+            average_latency_ns=latency,
             p95_latency_ns=5200 if latency else None,
             p99_latency_ns=8500 if latency else None,
         )
@@ -782,8 +769,10 @@ class IterationTest(unittest.TestCase):
             summary=SAMPLE_OVERALL_SUMMARY,
         )
 
-    def _find_test_agg(self, agg, mechanism, msg_size=1024,
-                       direction="one_way"):
+    def _find_test_agg(
+        self, agg, mechanism, msg_size=1024,
+        direction="one_way",
+    ):
         """Find a TestIterationAggregate by its identity fields."""
         for t in agg.tests:
             if (t.mechanism == mechanism
