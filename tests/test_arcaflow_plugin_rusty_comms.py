@@ -11,6 +11,7 @@ import unittest
 from unittest import mock
 
 from arcaflow_plugin_sdk import plugin
+from arcaflow_plugin_sdk.schema import ConstraintException
 
 import rusty_comms_plugin
 from rusty_comms_schema import (
@@ -19,9 +20,12 @@ from rusty_comms_schema import (
     BenchmarkSummary,
     ErrorOutput,
     InputParams,
+    IterationAggregates,
     LatencyMetrics,
     Mechanism,
+    TestIterationAggregate,
     MechanismSummary,
+    MetricStatistics,
     OverallSummary,
     PercentileValue,
     PerformanceMetrics,
@@ -56,16 +60,17 @@ SAMPLE_LATENCY = LatencyMetrics(
     latency_type="OneWay",
     min_ns=1500,
     max_ns=45000,
-    mean_ns=3201,
-    median_ns=3100,
-    std_dev_ns=1200,
+    mean_ns=3201.0,
+    median_ns=3100.0,
+    std_dev_ns=1200.0,
     percentiles=SAMPLE_PERCENTILES,
     total_samples=10000,
+    histogram_data=[100, 200, 300],
 )
 
 SAMPLE_THROUGHPUT = ThroughputMetrics(
-    messages_per_second=312500,
-    bytes_per_second=320000000,
+    messages_per_second=312500.0,
+    bytes_per_second=320000000.0,
     total_messages=10000,
     total_bytes=10240000,
     duration_ns=32000000,
@@ -95,7 +100,7 @@ SAMPLE_BENCHMARK_SUMMARY = BenchmarkSummary(
     average_throughput_mbps=305.17,
     peak_throughput_mbps=310.0,
     error_count=0,
-    average_latency_ns=3201,
+    average_latency_ns=3201.0,
     min_latency_ns=1500,
     max_latency_ns=45000,
     p95_latency_ns=5200,
@@ -362,9 +367,19 @@ class CLIArgsTest(unittest.TestCase):
         self.assertIn("--output-file", args)
         self.assertIn("/tmp/out.json", args)
 
-    def test_blocking_default(self):
-        """Blocking should be enabled by default when not specified."""
+    def test_blocking_default_not_passed(self):
+        """Unset blocking should not inject --blocking flag."""
         config = TestRunConfig(mechanisms=[Mechanism.uds])
+        args = rusty_comms_plugin._build_cli_args(
+            config, "/tmp/out.json"
+        )
+        self.assertNotIn("--blocking", args)
+
+    def test_blocking_explicit_true(self):
+        """Setting blocking to True should pass --blocking."""
+        config = TestRunConfig(
+            mechanisms=[Mechanism.uds], blocking=True
+        )
         args = rusty_comms_plugin._build_cli_args(
             config, "/tmp/out.json"
         )
@@ -515,11 +530,334 @@ class JSONParsingTest(unittest.TestCase):
         self.assertEqual(mech.total_messages, 10000)
 
     def test_parse_missing_key_raises(self):
-        """Missing required keys should raise an exception."""
+        """Missing required keys should raise ConstraintException."""
         raw = _build_sample_json()
         del raw["metadata"]["version"]
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ConstraintException):
             rusty_comms_plugin._parse_json_output(raw)
+
+    def test_float_values_preserved(self):
+        """Float values in float fields should pass through as-is."""
+        raw = _build_sample_json()
+        raw["results"][0]["one_way_results"]["latency"][
+            "mean_ns"
+        ] = 9999.7
+        result = rusty_comms_plugin._parse_json_output(raw)
+        ow = result.results[0].one_way_results
+        self.assertAlmostEqual(ow.latency.mean_ns, 9999.7)
+        self.assertIsInstance(ow.latency.mean_ns, float)
+
+    def test_histogram_data_preserved(self):
+        """histogram_data should be passed through to the output."""
+        raw = _build_sample_json()
+        self.assertIn(
+            "histogram_data",
+            raw["results"][0]["one_way_results"]["latency"],
+        )
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertIsInstance(result, SuccessOutput)
+        ow = result.results[0].one_way_results
+        self.assertEqual(
+            ow.latency.histogram_data, [100, 200, 300]
+        )
+
+    def test_unknown_top_level_key_rejected(self):
+        """Unknown top-level keys should be rejected by the SDK."""
+        raw = _build_sample_json()
+        raw["debug_info"] = {"internal": True}
+        with self.assertRaises(ConstraintException):
+            rusty_comms_plugin._parse_json_output(raw)
+
+    def test_parse_failure_status_dict(self):
+        """Rust {'Failure': 'reason'} status should be normalized."""
+        raw = _build_sample_json()
+        raw["results"][0]["status"] = {"Failure": "connection refused"}
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertEqual(result.results[0].status, "Failure")
+        self.assertEqual(
+            result.results[0].failure_reason, "connection refused"
+        )
+
+    def test_parse_success_status_has_no_failure_reason(self):
+        """Successful status should have failure_reason=None."""
+        raw = _build_sample_json()
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertEqual(result.results[0].status, "Success")
+        self.assertIsNone(result.results[0].failure_reason)
+
+
+class MergeOutputsTest(unittest.TestCase):
+    """Verify _merge_outputs aggregation of duplicate mechanisms."""
+
+    def _make_output(
+        self, mechanism_name, throughput, messages, p95, p99,
+    ):
+        """Build a minimal SuccessOutput for merge testing.
+
+        Args:
+            mechanism_name: Display name key for the mechanism.
+            throughput: Average throughput in MB/s.
+            messages: Total messages for this mechanism.
+            p95: P95 latency in nanoseconds (or None).
+            p99: P99 latency in nanoseconds (or None).
+
+        Returns:
+            A SuccessOutput with one mechanism in its summary.
+        """
+        return SuccessOutput(
+            metadata=SAMPLE_METADATA,
+            results=[SAMPLE_RESULT],
+            summary=OverallSummary(
+                total_messages=messages,
+                total_bytes=messages * 1024,
+                total_errors=0,
+                mechanisms={
+                    mechanism_name: MechanismSummary(
+                        mechanism="UnixDomainSocket",
+                        average_throughput_mbps=throughput,
+                        total_messages=messages,
+                        p95_latency_ns=p95,
+                        p99_latency_ns=p99,
+                    )
+                },
+                fastest_mechanism=mechanism_name,
+                lowest_latency_mechanism=mechanism_name,
+            ),
+        )
+
+    def test_duplicate_mechanisms_aggregated(self):
+        """Same mechanism from two runs should be merged, not overwritten."""
+        out1 = self._make_output("UDS", 300.0, 10000, 5000, 8000)
+        out2 = self._make_output("UDS", 250.0, 20000, 4000, 7000)
+        merged = rusty_comms_plugin._merge_outputs([out1, out2])
+
+        mech = merged.summary.mechanisms["UDS"]
+        self.assertEqual(mech.total_messages, 30000)
+        self.assertAlmostEqual(
+            mech.average_throughput_mbps, 300.0,
+        )
+        self.assertEqual(mech.p95_latency_ns, 4000)
+        self.assertEqual(mech.p99_latency_ns, 7000)
+
+    def test_distinct_mechanisms_both_kept(self):
+        """Different mechanisms should both appear in the merged output."""
+        out1 = self._make_output("UDS", 300.0, 10000, 5000, 8000)
+        out2 = self._make_output("TCP", 200.0, 10000, 6000, 9000)
+        merged = rusty_comms_plugin._merge_outputs([out1, out2])
+
+        self.assertIn("UDS", merged.summary.mechanisms)
+        self.assertIn("TCP", merged.summary.mechanisms)
+        self.assertEqual(merged.summary.fastest_mechanism, "UDS")
+        self.assertEqual(
+            merged.summary.lowest_latency_mechanism, "UDS",
+        )
+
+    def test_fastest_derived_from_merged_data(self):
+        """Fastest mechanism should reflect aggregated throughput."""
+        out1 = self._make_output("UDS", 100.0, 10000, 5000, 8000)
+        out2 = self._make_output("TCP", 200.0, 10000, 6000, 9000)
+        out3 = self._make_output("UDS", 300.0, 10000, 4500, 7500)
+        merged = rusty_comms_plugin._merge_outputs(
+            [out1, out2, out3]
+        )
+
+        self.assertEqual(merged.summary.fastest_mechanism, "UDS")
+        uds = merged.summary.mechanisms["UDS"]
+        self.assertAlmostEqual(
+            uds.average_throughput_mbps, 300.0,
+        )
+
+    def test_lowest_latency_with_none_values(self):
+        """None latencies should be ignored when finding the minimum."""
+        out1 = self._make_output("UDS", 300.0, 10000, None, None)
+        out2 = self._make_output("UDS", 250.0, 10000, 5000, 8000)
+        merged = rusty_comms_plugin._merge_outputs([out1, out2])
+
+        mech = merged.summary.mechanisms["UDS"]
+        self.assertEqual(mech.p95_latency_ns, 5000)
+        self.assertEqual(mech.p99_latency_ns, 8000)
+
+
+class IterationTest(unittest.TestCase):
+    """Tests for iteration and statistical aggregation."""
+
+    def test_iterations_default_is_one(self):
+        """TestRunConfig iterations should default to 1."""
+        config = TestRunConfig(mechanisms=[Mechanism.uds])
+        self.assertEqual(config.iterations, 1)
+
+    def test_iterations_serialization(self):
+        """TestRunConfig with iterations should serialize."""
+        plugin.test_object_serialization(
+            TestRunConfig(
+                mechanisms=[Mechanism.uds], iterations=3,
+            )
+        )
+
+    def test_iteration_aggregates_serialization(self):
+        """SuccessOutput with iteration_aggregates should serialize."""
+        agg = IterationAggregates(
+            tests=[
+                TestIterationAggregate(
+                    mechanism="UnixDomainSocket",
+                    message_size=1024,
+                    direction="one_way",
+                    iterations_completed=3,
+                    throughput_mbps=MetricStatistics(
+                        mean=300.0,
+                        stddev=10.0,
+                        min_value=290.0,
+                        max_value=310.0,
+                        sample_count=3,
+                    ),
+                )
+            ]
+        )
+        output = SuccessOutput(
+            metadata=SAMPLE_METADATA,
+            results=[SAMPLE_RESULT],
+            summary=SAMPLE_OVERALL_SUMMARY,
+            iteration_aggregates=agg,
+        )
+        plugin.test_object_serialization(output)
+
+    def test_compute_stats_single_value(self):
+        """Single value should yield stddev=0."""
+        stats = rusty_comms_plugin._compute_stats([100.0])
+        self.assertEqual(stats.mean, 100.0)
+        self.assertEqual(stats.stddev, 0.0)
+        self.assertEqual(stats.min_value, 100.0)
+        self.assertEqual(stats.max_value, 100.0)
+        self.assertEqual(stats.sample_count, 1)
+
+    def test_compute_stats_multiple_values(self):
+        """Multiple values should compute correct statistics."""
+        stats = rusty_comms_plugin._compute_stats(
+            [100.0, 200.0, 300.0]
+        )
+        self.assertAlmostEqual(stats.mean, 200.0)
+        self.assertAlmostEqual(stats.stddev, 100.0)
+        self.assertEqual(stats.min_value, 100.0)
+        self.assertEqual(stats.max_value, 300.0)
+        self.assertEqual(stats.sample_count, 3)
+
+    def test_compute_stats_identical_values(self):
+        """Identical values should yield stddev=0."""
+        stats = rusty_comms_plugin._compute_stats(
+            [42.0, 42.0, 42.0]
+        )
+        self.assertEqual(stats.mean, 42.0)
+        self.assertEqual(stats.stddev, 0.0)
+
+    def _make_output_with_summary(self, throughput, latency):
+        """Build a SuccessOutput with specific summary metrics.
+
+        Args:
+            throughput: Average throughput in MB/s.
+            latency: Average latency in ns (or None).
+
+        Returns:
+            A SuccessOutput with one UDS mechanism result.
+        """
+        summary = BenchmarkSummary(
+            total_messages_sent=10000,
+            total_bytes_transferred=10240000,
+            average_throughput_mbps=throughput,
+            peak_throughput_mbps=throughput + 10,
+            error_count=0,
+            average_latency_ns=(
+                float(latency) if latency is not None
+                else None
+            ),
+            p95_latency_ns=5200 if latency else None,
+            p99_latency_ns=8500 if latency else None,
+        )
+        result = BenchmarkResult(
+            mechanism="UnixDomainSocket",
+            status="Success",
+            test_config=SAMPLE_TEST_CONFIG,
+            summary=summary,
+            timestamp="2024-01-01T00:00:00Z",
+            test_duration={"secs": 32, "nanos": 0},
+            system_info=SAMPLE_SYSTEM_INFO,
+        )
+        return SuccessOutput(
+            metadata=SAMPLE_METADATA,
+            results=[result],
+            summary=SAMPLE_OVERALL_SUMMARY,
+        )
+
+    def _find_test_agg(
+        self, agg, mechanism, msg_size=1024,
+        direction="one_way",
+    ):
+        """Find a TestIterationAggregate by its identity fields."""
+        for t in agg.tests:
+            if (t.mechanism == mechanism
+                    and t.message_size == msg_size
+                    and t.direction == direction):
+                return t
+        self.fail(
+            f"No aggregate for {mechanism}/"
+            f"{msg_size}/{direction}"
+        )
+
+    def test_iteration_aggregates_computed(self):
+        """Aggregates should reflect statistics across outputs."""
+        outputs = [
+            self._make_output_with_summary(300.0, 3200),
+            self._make_output_with_summary(310.0, 3100),
+            self._make_output_with_summary(290.0, 3300),
+        ]
+        agg = rusty_comms_plugin._compute_iteration_aggregates(
+            outputs
+        )
+        self.assertEqual(len(agg.tests), 1)
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+        self.assertEqual(t.iterations_completed, 3)
+        self.assertAlmostEqual(
+            t.throughput_mbps.mean, 300.0,
+        )
+        self.assertEqual(
+            t.throughput_mbps.min_value, 290.0,
+        )
+        self.assertEqual(
+            t.throughput_mbps.max_value, 310.0,
+        )
+        self.assertIsNotNone(t.mean_latency_ns)
+        self.assertIsNotNone(t.p95_latency_ns)
+        self.assertIsNotNone(t.p99_latency_ns)
+
+    def test_aggregates_without_latency(self):
+        """Tests without latency should have None aggregates."""
+        outputs = [
+            self._make_output_with_summary(300.0, None),
+            self._make_output_with_summary(310.0, None),
+        ]
+        agg = rusty_comms_plugin._compute_iteration_aggregates(
+            outputs
+        )
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+        self.assertIsNotNone(t.throughput_mbps)
+        self.assertIsNone(t.mean_latency_ns)
+        self.assertIsNone(t.p95_latency_ns)
+        self.assertIsNone(t.p99_latency_ns)
+
+    def test_single_iteration_aggregates(self):
+        """Single iteration should produce valid aggregates."""
+        outputs = [
+            self._make_output_with_summary(300.0, 3200),
+        ]
+        agg = rusty_comms_plugin._compute_iteration_aggregates(
+            outputs
+        )
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+        self.assertEqual(t.iterations_completed, 1)
+        self.assertEqual(t.throughput_mbps.stddev, 0.0)
+        self.assertEqual(
+            t.throughput_mbps.min_value,
+            t.throughput_mbps.max_value,
+        )
 
 
 class FunctionalTest(unittest.TestCase):
@@ -569,7 +907,9 @@ class FunctionalTest(unittest.TestCase):
         mock_popen.side_effect = side_effect
 
         params = InputParams(
-            tests=[TestRunConfig(mechanisms=[Mechanism.uds])]
+            tests=[TestRunConfig(
+                mechanisms=[Mechanism.uds], iterations=1,
+            )]
         )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
@@ -604,8 +944,12 @@ class FunctionalTest(unittest.TestCase):
 
         params = InputParams(
             tests=[
-                TestRunConfig(mechanisms=[Mechanism.uds]),
-                TestRunConfig(mechanisms=[Mechanism.tcp]),
+                TestRunConfig(
+                    mechanisms=[Mechanism.uds], iterations=1,
+                ),
+                TestRunConfig(
+                    mechanisms=[Mechanism.tcp], iterations=1,
+                ),
             ]
         )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
@@ -631,7 +975,9 @@ class FunctionalTest(unittest.TestCase):
         )
 
         params = InputParams(
-            tests=[TestRunConfig(mechanisms=[Mechanism.uds])]
+            tests=[TestRunConfig(
+                mechanisms=[Mechanism.uds], iterations=1,
+            )]
         )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
@@ -648,7 +994,9 @@ class FunctionalTest(unittest.TestCase):
     def test_missing_binary_returns_error(self, mock_find):
         """Missing binary should return ErrorOutput."""
         params = InputParams(
-            tests=[TestRunConfig(mechanisms=[Mechanism.uds])]
+            tests=[TestRunConfig(
+                mechanisms=[Mechanism.uds], iterations=1,
+            )]
         )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
@@ -670,7 +1018,9 @@ class FunctionalTest(unittest.TestCase):
         mock_find.return_value = "/usr/local/bin/ipc-benchmark"
 
         params = InputParams(
-            tests=[TestRunConfig(mechanisms=[Mechanism.tcp])]
+            tests=[TestRunConfig(
+                mechanisms=[Mechanism.tcp], iterations=1,
+            )]
         )
         output_id, output_data = rusty_comms_plugin.run_benchmark(
             params=params, run_id="test_run"
@@ -679,6 +1029,59 @@ class FunctionalTest(unittest.TestCase):
         self.assertEqual(output_id, "error")
         self.assertIsInstance(output_data, ErrorOutput)
         self.assertIn("exec format error", output_data.error)
+
+    @mock.patch("rusty_comms_plugin._find_binary")
+    @mock.patch("rusty_comms_plugin.subprocess.Popen")
+    def test_iterations_runs_n_times(
+        self, mock_popen, mock_find
+    ):
+        """Each test config should run iterations times."""
+        mock_find.return_value = "/usr/local/bin/ipc-benchmark"
+
+        sample_json = _build_sample_json()
+
+        def side_effect(cmd, **kwargs):
+            for i, arg in enumerate(cmd):
+                if arg == "--output-file" and i + 1 < len(cmd):
+                    output_path = cmd[i + 1]
+                    os.makedirs(
+                        os.path.dirname(output_path),
+                        exist_ok=True,
+                    )
+                    with open(output_path, "w") as f:
+                        json.dump(sample_json, f)
+                    break
+            return self._make_popen_mock()
+
+        mock_popen.side_effect = side_effect
+
+        params = InputParams(
+            tests=[TestRunConfig(
+                mechanisms=[Mechanism.uds], iterations=3,
+            )]
+        )
+        output_id, output_data = rusty_comms_plugin.run_benchmark(
+            params=params, run_id="test_run"
+        )
+
+        self.assertEqual(output_id, "success")
+        self.assertEqual(mock_popen.call_count, 3)
+        self.assertEqual(len(output_data.results), 3)
+        self.assertIsNotNone(
+            output_data.iteration_aggregates
+        )
+        self.assertGreaterEqual(
+            len(output_data.iteration_aggregates.tests), 1
+        )
+        uds_aggs = [
+            t for t in
+            output_data.iteration_aggregates.tests
+            if t.mechanism == "UnixDomainSocket"
+        ]
+        self.assertEqual(len(uds_aggs), 1)
+        self.assertEqual(
+            uds_aggs[0].iterations_completed, 3
+        )
 
 
 if __name__ == "__main__":

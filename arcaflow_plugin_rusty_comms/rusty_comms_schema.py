@@ -88,8 +88,9 @@ class TestRunConfig:
         typing.Optional[bool],
         schema.name("Blocking Mode"),
         schema.description(
-            "Use blocking I/O. Defaults to true when not"
-            " specified. Set to false for async Tokio mode."
+            "Use blocking I/O. When not set, the binary's own"
+            " default applies. Set to true for blocking mode"
+            " or false for async Tokio mode."
         ),
     ] = None
 
@@ -223,6 +224,32 @@ class TestRunConfig:
         ),
     ] = None
 
+    iterations: typing.Annotated[
+        typing.Optional[int],
+        schema.name("Iterations"),
+        schema.description(
+            "Number of times to repeat this test configuration."
+            " Results from all iterations are collected and"
+            " statistical aggregates (mean, stddev, min, max)"
+            " are computed per mechanism. Set to a higher"
+            " value (e.g. 5) for statistically significant"
+            " results."
+        ),
+        schema.min(1),
+    ] = 1
+
+    timeout: typing.Annotated[
+        typing.Optional[int],
+        schema.name("Timeout"),
+        schema.description(
+            "Maximum seconds to wait for the benchmark to"
+            " complete before killing the process. Increase"
+            " for large benchmark matrices or long-duration"
+            " tests."
+        ),
+        schema.min(1),
+    ] = 3600
+
     extra_args: typing.Annotated[
         typing.Optional[typing.List[str]],
         schema.name("Extra Arguments"),
@@ -298,19 +325,19 @@ class LatencyMetrics:
     ]
 
     mean_ns: typing.Annotated[
-        int,
+        float,
         schema.name("Mean (ns)"),
         schema.description("Mean latency in nanoseconds."),
     ]
 
     median_ns: typing.Annotated[
-        int,
+        float,
         schema.name("Median (ns)"),
         schema.description("Median (P50) latency in nanoseconds."),
     ]
 
     std_dev_ns: typing.Annotated[
-        int,
+        float,
         schema.name("Std Dev (ns)"),
         schema.description(
             "Standard deviation of latency in nanoseconds."
@@ -329,19 +356,30 @@ class LatencyMetrics:
         schema.description("Number of latency samples collected."),
     ]
 
+    histogram_data: typing.Annotated[
+        typing.List[int],
+        schema.name("Histogram Data"),
+        schema.description(
+            "Raw HDR histogram quantile samples for advanced"
+            " analysis and visualization. Each entry is a"
+            " latency value in nanoseconds from the quantile"
+            " iteration of the underlying HdrHistogram."
+        ),
+    ]
+
 
 @dataclass
 class ThroughputMetrics:
     """Throughput measurements from a benchmark run."""
 
     messages_per_second: typing.Annotated[
-        int,
+        float,
         schema.name("Messages/sec"),
         schema.description("Message transmission rate."),
     ]
 
     bytes_per_second: typing.Annotated[
-        int,
+        float,
         schema.name("Bytes/sec"),
         schema.description("Data transmission rate in bytes per second."),
     ]
@@ -484,7 +522,7 @@ class BenchmarkSummary:
     ]
 
     average_latency_ns: typing.Annotated[
-        typing.Optional[int],
+        typing.Optional[float],
         schema.name("Average Latency (ns)"),
         schema.description("Average latency in nanoseconds."),
     ] = None
@@ -569,10 +607,10 @@ class BenchmarkResult:
     ]
 
     status: typing.Annotated[
-        typing.Any,
+        str,
         schema.name("Status"),
         schema.description(
-            "'Success' or {'Failure': 'reason'}."
+            "Test outcome: 'Success' or 'Failure'."
         ),
     ]
 
@@ -605,6 +643,15 @@ class BenchmarkResult:
         schema.name("System Info"),
         schema.description("System info captured during this test."),
     ]
+
+    failure_reason: typing.Annotated[
+        typing.Optional[str],
+        schema.name("Failure Reason"),
+        schema.description(
+            "Error description when status is 'Failure'."
+            " None when the test succeeded."
+        ),
+    ] = None
 
     one_way_results: typing.Annotated[
         typing.Optional[PerformanceMetrics],
@@ -776,6 +823,159 @@ class OverallSummary:
 
 
 # ---------------------------------------------------------------------------
+# Iteration aggregate dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MetricStatistics:
+    """Statistical summary of a numeric metric across iterations.
+
+    Provides mean, standard deviation, min, and max computed
+    across multiple benchmark iterations of the same mechanism.
+    """
+
+    mean: typing.Annotated[
+        float,
+        schema.name("Mean"),
+        schema.description("Arithmetic mean across iterations."),
+    ]
+
+    stddev: typing.Annotated[
+        float,
+        schema.name("Standard Deviation"),
+        schema.description(
+            "Sample standard deviation across iterations."
+            " Zero when only one iteration was run."
+        ),
+    ]
+
+    min_value: typing.Annotated[
+        float,
+        schema.name("Minimum"),
+        schema.description("Minimum observed value."),
+    ]
+
+    max_value: typing.Annotated[
+        float,
+        schema.name("Maximum"),
+        schema.description("Maximum observed value."),
+    ]
+
+    sample_count: typing.Annotated[
+        int,
+        schema.name("Sample Count"),
+        schema.description(
+            "Number of iterations contributing to this"
+            " statistic."
+        ),
+        schema.min(1),
+    ]
+
+
+@dataclass
+class TestIterationAggregate:
+    """Aggregated statistics for one test configuration across iterations.
+
+    Groups results by the full test identity (mechanism, message
+    size, and direction) so that distinct tests using the same
+    mechanism are never mixed.  Computes statistical summaries of
+    throughput and latency for stable cross-run comparisons.
+    """
+
+    mechanism: typing.Annotated[
+        str,
+        schema.name("Mechanism"),
+        schema.description("IPC mechanism enum variant name."),
+    ]
+
+    message_size: typing.Annotated[
+        int,
+        schema.name("Message Size"),
+        schema.description(
+            "Payload size in bytes for this test."
+        ),
+    ]
+
+    direction: typing.Annotated[
+        str,
+        schema.name("Direction"),
+        schema.description(
+            "Test direction: 'one_way' or 'round_trip'."
+        ),
+    ]
+
+    iterations_completed: typing.Annotated[
+        int,
+        schema.name("Iterations Completed"),
+        schema.description(
+            "Number of iterations that produced results"
+            " for this test configuration."
+        ),
+        schema.min(1),
+    ]
+
+    throughput_mbps: typing.Annotated[
+        MetricStatistics,
+        schema.name("Throughput (MB/s)"),
+        schema.description(
+            "Statistical summary of average throughput"
+            " across iterations."
+        ),
+    ]
+
+    mean_latency_ns: typing.Annotated[
+        typing.Optional[MetricStatistics],
+        schema.name("Mean Latency (ns)"),
+        schema.description(
+            "Statistical summary of mean latency across"
+            " iterations. None when no latency data was"
+            " collected."
+        ),
+    ] = None
+
+    p95_latency_ns: typing.Annotated[
+        typing.Optional[MetricStatistics],
+        schema.name("P95 Latency (ns)"),
+        schema.description(
+            "Statistical summary of P95 latency across"
+            " iterations."
+        ),
+    ] = None
+
+    p99_latency_ns: typing.Annotated[
+        typing.Optional[MetricStatistics],
+        schema.name("P99 Latency (ns)"),
+        schema.description(
+            "Statistical summary of P99 latency across"
+            " iterations."
+        ),
+    ] = None
+
+
+@dataclass
+class IterationAggregates:
+    """Per-test-configuration statistical aggregates across iterations.
+
+    When tests are run for multiple iterations, this structure
+    provides a statistical view of key metrics grouped by the
+    full test identity (mechanism + message size + direction).
+    Each unique test configuration gets its own aggregate with
+    mean, stddev, min, and max for throughput and latency.
+    """
+
+    tests: typing.Annotated[
+        typing.List[TestIterationAggregate],
+        schema.name("Tests"),
+        schema.description(
+            "Per-test-configuration aggregate statistics."
+            " Each entry represents a unique combination of"
+            " mechanism, message size, and direction."
+        ),
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Top-level output dataclasses
 # ---------------------------------------------------------------------------
 
@@ -804,6 +1004,18 @@ class SuccessOutput:
         schema.name("Overall Summary"),
         schema.description("Aggregated summary across mechanisms."),
     ]
+
+    iteration_aggregates: typing.Annotated[
+        typing.Optional[IterationAggregates],
+        schema.name("Iteration Aggregates"),
+        schema.description(
+            "Per-mechanism statistical aggregates computed"
+            " across iterations. Populated when tests are"
+            " run with iterations > 0. Contains mean,"
+            " stddev, min, and max for throughput and"
+            " latency metrics."
+        ),
+    ] = None
 
 
 @dataclass

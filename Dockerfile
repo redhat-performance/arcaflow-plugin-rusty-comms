@@ -3,13 +3,25 @@ ARG package=arcaflow_plugin_rusty_comms
 
 # ---------------------------------------------------------------------------
 # STAGE 0 -- Build rusty-comms from source
+#
+# Uses CentOS Stream 9 to match the arcalot runtime base image, ensuring
+# the compiled binary links against the same glibc version (2.34) that
+# will be available at runtime.
 # ---------------------------------------------------------------------------
-FROM docker.io/library/rust:1.82-slim-bookworm AS rust-builder
+FROM quay.io/centos/centos:stream9 AS rust-builder
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends git pkg-config \
- && rm -rf /var/lib/apt/lists/*
+RUN dnf install -y --setopt=install_weak_deps=False \
+        gcc git make pkgconf-pkg-config \
+ && dnf clean all
 
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain 1.82.0
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Fetch the latest commit ref for main; ADD always checks the URL
+# at build time and invalidates the layer cache when it changes.
+ADD https://api.github.com/repos/redhat-performance/rusty-comms/git/refs/heads/main \
+    /tmp/rusty-comms-ref.json
 RUN git clone --depth 1 --branch main \
         https://github.com/redhat-performance/rusty-comms.git \
         /build/rusty-comms
@@ -20,7 +32,7 @@ RUN cargo build --release
 # ---------------------------------------------------------------------------
 # STAGE 1 -- Build Python module dependencies and run tests
 # ---------------------------------------------------------------------------
-FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-buildbase:0.4.0 AS build
+FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-buildbase:0.5.0 AS build
 ARG package
 
 COPY poetry.lock /app/
@@ -41,7 +53,7 @@ RUN python -m coverage run tests/test_${package}.py \
 # ---------------------------------------------------------------------------
 # STAGE 2 -- Build final plugin image
 # ---------------------------------------------------------------------------
-FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-osbase:0.4.0
+FROM quay.io/arcalot/arcaflow-plugin-baseimage-python-osbase:0.5.0
 ARG package
 
 COPY --from=rust-builder /build/rusty-comms/target/release/ipc-benchmark \
@@ -60,9 +72,9 @@ WORKDIR /app/${package}
 ENTRYPOINT ["python", "rusty_comms_plugin.py"]
 CMD []
 
-LABEL org.opencontainers.image.source="https://github.com/arcalot/arcaflow-plugin-rusty-comms"
+LABEL org.opencontainers.image.source="https://github.com/redhat-performance/arcaflow-plugin-rusty-comms"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.vendor="Arcalot project"
-LABEL org.opencontainers.image.authors="Arcalot contributors"
+LABEL org.opencontainers.image.vendor="Red Hat Performance"
+LABEL org.opencontainers.image.authors="Red Hat Performance contributors"
 LABEL org.opencontainers.image.title="Arcaflow rusty-comms IPC Benchmark Plugin"
 LABEL io.github.arcalot.arcaflow.plugin.version="1"
