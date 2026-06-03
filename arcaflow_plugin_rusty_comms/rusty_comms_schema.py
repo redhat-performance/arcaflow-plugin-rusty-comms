@@ -503,13 +503,13 @@ class BenchmarkSummary:
         schema.description("Total bytes transferred."),
     ]
 
-    average_throughput_mbps: typing.Annotated[
+    average_throughput_megabytes_per_sec: typing.Annotated[
         float,
         schema.name("Average Throughput (MB/s)"),
         schema.description("Average throughput in megabytes per second."),
     ]
 
-    peak_throughput_mbps: typing.Annotated[
+    peak_throughput_megabytes_per_sec: typing.Annotated[
         float,
         schema.name("Peak Throughput (MB/s)"),
         schema.description("Peak throughput in megabytes per second."),
@@ -754,7 +754,7 @@ class MechanismSummary:
         schema.description("IPC mechanism enum variant name."),
     ]
 
-    average_throughput_mbps: typing.Annotated[
+    average_throughput_megabytes_per_sec: typing.Annotated[
         float,
         schema.name("Average Throughput (MB/s)"),
         schema.description("Average throughput for this mechanism."),

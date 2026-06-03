@@ -540,7 +540,7 @@ def _compute_iteration_aggregates(
         grouped.items()
     ):
         throughputs = [
-            s.average_throughput_mbps for s in summaries
+            s.average_throughput_megabytes_per_sec for s in summaries
         ]
         latencies = [
             float(s.average_latency_ns)
@@ -618,8 +618,8 @@ def _merge_outputs(
             if name not in all_mechanisms:
                 all_mechanisms[name] = MechanismSummary(
                     mechanism=mech.mechanism,
-                    average_throughput_mbps=(
-                        mech.average_throughput_mbps
+                    average_throughput_megabytes_per_sec=(
+                        mech.average_throughput_megabytes_per_sec
                     ),
                     total_messages=mech.total_messages,
                     p95_latency_ns=mech.p95_latency_ns,
@@ -629,9 +629,9 @@ def _merge_outputs(
                 existing = all_mechanisms[name]
                 all_mechanisms[name] = MechanismSummary(
                     mechanism=existing.mechanism,
-                    average_throughput_mbps=max(
-                        existing.average_throughput_mbps,
-                        mech.average_throughput_mbps,
+                    average_throughput_megabytes_per_sec=max(
+                        existing.average_throughput_megabytes_per_sec,
+                        mech.average_throughput_megabytes_per_sec,
                     ),
                     total_messages=(
                         existing.total_messages
@@ -653,8 +653,8 @@ def _merge_outputs(
     lowest_latency = float("inf")
 
     for name, mech in all_mechanisms.items():
-        if mech.average_throughput_mbps > fastest_throughput:
-            fastest_throughput = mech.average_throughput_mbps
+        if mech.average_throughput_megabytes_per_sec > fastest_throughput:
+            fastest_throughput = mech.average_throughput_megabytes_per_sec
             fastest_mechanism = name
         if (
             mech.p95_latency_ns is not None

@@ -97,8 +97,8 @@ SAMPLE_TEST_CONFIG = TestConfiguration(
 SAMPLE_BENCHMARK_SUMMARY = BenchmarkSummary(
     total_messages_sent=10000,
     total_bytes_transferred=10240000,
-    average_throughput_mbps=305.17,
-    peak_throughput_mbps=310.0,
+    average_throughput_megabytes_per_sec=305.17,
+    peak_throughput_megabytes_per_sec=310.0,
     error_count=0,
     average_latency_ns=3201.0,
     min_latency_ns=1500,
@@ -121,7 +121,7 @@ SAMPLE_RESULT = BenchmarkResult(
 
 SAMPLE_MECHANISM_SUMMARY = MechanismSummary(
     mechanism="UnixDomainSocket",
-    average_throughput_mbps=305.17,
+    average_throughput_megabytes_per_sec=305.17,
     total_messages=10000,
     p95_latency_ns=5200,
     p99_latency_ns=8500,
@@ -210,8 +210,8 @@ def _build_sample_json() -> dict:
                 "summary": {
                     "total_messages_sent": 10000,
                     "total_bytes_transferred": 10240000,
-                    "average_throughput_mbps": 305.17,
-                    "peak_throughput_mbps": 310.0,
+                    "average_throughput_megabytes_per_sec": 305.17,
+                    "peak_throughput_megabytes_per_sec": 310.0,
                     "error_count": 0,
                     "average_latency_ns": 3200.5,
                     "min_latency_ns": 1500,
@@ -238,7 +238,7 @@ def _build_sample_json() -> dict:
             "mechanisms": {
                 "Unix Domain Socket": {
                     "mechanism": "UnixDomainSocket",
-                    "average_throughput_mbps": 305.17,
+                    "average_throughput_megabytes_per_sec": 305.17,
                     "total_messages": 10000,
                     "p95_latency_ns": 5200,
                     "p99_latency_ns": 8500,
@@ -614,7 +614,7 @@ class MergeOutputsTest(unittest.TestCase):
                 mechanisms={
                     mechanism_name: MechanismSummary(
                         mechanism="UnixDomainSocket",
-                        average_throughput_mbps=throughput,
+                        average_throughput_megabytes_per_sec=throughput,
                         total_messages=messages,
                         p95_latency_ns=p95,
                         p99_latency_ns=p99,
@@ -634,7 +634,7 @@ class MergeOutputsTest(unittest.TestCase):
         mech = merged.summary.mechanisms["UDS"]
         self.assertEqual(mech.total_messages, 30000)
         self.assertAlmostEqual(
-            mech.average_throughput_mbps, 300.0,
+            mech.average_throughput_megabytes_per_sec, 300.0,
         )
         self.assertEqual(mech.p95_latency_ns, 4000)
         self.assertEqual(mech.p99_latency_ns, 7000)
@@ -664,7 +664,7 @@ class MergeOutputsTest(unittest.TestCase):
         self.assertEqual(merged.summary.fastest_mechanism, "UDS")
         uds = merged.summary.mechanisms["UDS"]
         self.assertAlmostEqual(
-            uds.average_throughput_mbps, 300.0,
+            uds.average_throughput_megabytes_per_sec, 300.0,
         )
 
     def test_lowest_latency_with_none_values(self):
@@ -762,8 +762,8 @@ class IterationTest(unittest.TestCase):
         summary = BenchmarkSummary(
             total_messages_sent=10000,
             total_bytes_transferred=10240000,
-            average_throughput_mbps=throughput,
-            peak_throughput_mbps=throughput + 10,
+            average_throughput_megabytes_per_sec=throughput,
+            peak_throughput_megabytes_per_sec=throughput + 10,
             error_count=0,
             average_latency_ns=(
                 float(latency) if latency is not None
