@@ -362,7 +362,7 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         <table><tbody><tr><th>Name:</th><td>Average Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Average latency in nanoseconds.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
-        </details><details><summary>average_throughput_mbps (<code>float</code>)</summary>
+        </details><details><summary>average_throughput_megabytes_per_sec (<code>float</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Average Throughput (MB/s)</td></tr><tr><th>Description:</th><td width="500">Average throughput in megabytes per second.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
@@ -386,7 +386,7 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         <table><tbody><tr><th>Name:</th><td>P99 Latency (ns)</td></tr><tr><th>Description:</th><td width="500">99th percentile latency in nanoseconds.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>int</code></td>
 </tr>
 </tbody></table>
-        </details><details><summary>peak_throughput_mbps (<code>float</code>)</summary>
+        </details><details><summary>peak_throughput_megabytes_per_sec (<code>float</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Peak Throughput (MB/s)</td></tr><tr><th>Description:</th><td width="500">Peak throughput in megabytes per second.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
@@ -465,7 +465,7 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tr>
 </tbody></table>
         </details><details><summary>MechanismSummary (<code>object</code>)</summary>
-            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>average_throughput_mbps (<code>float</code>)</summary>
+            <table><tbody><tr><th>Type:</th><td><code>object</code></td><tr><th>Properties</th><td><details><summary>average_throughput_megabytes_per_sec (<code>float</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Average Throughput (MB/s)</td></tr><tr><th>Description:</th><td width="500">Average throughput for this mechanism.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
