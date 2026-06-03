@@ -489,7 +489,19 @@ class TestConfiguration:
 
 @dataclass
 class BenchmarkSummary:
-    """Per-mechanism summary statistics."""
+    """Per-mechanism summary statistics.
+
+    .. note:: Field naming across rusty-comms versions
+
+       rusty-comms v0.3.x renamed throughput fields in its JSON
+       output (``average_throughput_mbps`` became
+       ``average_throughput_megabytes_per_sec``, and likewise
+       for ``peak_throughput_mbps``).  This schema keeps the
+       shorter ``_mbps`` names for downstream compatibility;
+       the parser normalizes the v0.3.x names before
+       validation.  See ``_SUMMARY_FIELD_RENAMES`` in
+       ``rusty_comms_plugin.py``.
+    """
 
     total_messages_sent: typing.Annotated[
         int,
@@ -503,12 +515,16 @@ class BenchmarkSummary:
         schema.description("Total bytes transferred."),
     ]
 
+    # Named ``average_throughput_megabytes_per_sec`` in
+    # rusty-comms v0.3.x JSON output; normalized by the parser.
     average_throughput_mbps: typing.Annotated[
         float,
         schema.name("Average Throughput (MB/s)"),
         schema.description("Average throughput in megabytes per second."),
     ]
 
+    # Named ``peak_throughput_megabytes_per_sec`` in
+    # rusty-comms v0.3.x JSON output; normalized by the parser.
     peak_throughput_mbps: typing.Annotated[
         float,
         schema.name("Peak Throughput (MB/s)"),
@@ -746,7 +762,16 @@ class BenchmarkMetadata:
 
 @dataclass
 class MechanismSummary:
-    """Summary for a single mechanism in the overall summary."""
+    """Summary for a single mechanism in the overall summary.
+
+    .. note:: Field naming across rusty-comms versions
+
+       The ``average_throughput_mbps`` field is named
+       ``average_throughput_megabytes_per_sec`` in
+       rusty-comms v0.3.x JSON output.  The parser normalizes
+       this before validation.  See ``_SUMMARY_FIELD_RENAMES``
+       in ``rusty_comms_plugin.py``.
+    """
 
     mechanism: typing.Annotated[
         str,
@@ -754,6 +779,8 @@ class MechanismSummary:
         schema.description("IPC mechanism enum variant name."),
     ]
 
+    # Named ``average_throughput_megabytes_per_sec`` in
+    # rusty-comms v0.3.x JSON output; normalized by the parser.
     average_throughput_mbps: typing.Annotated[
         float,
         schema.name("Average Throughput (MB/s)"),

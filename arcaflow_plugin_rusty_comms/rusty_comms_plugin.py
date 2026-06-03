@@ -146,6 +146,59 @@ def _build_cli_args(
 _success_schema = schema.build_object_schema(SuccessOutput)
 
 
+# Field names that were renamed between rusty-comms versions.
+#
+# rusty-comms v0.3.x changed its JSON output field names for
+# throughput metrics in both BenchmarkSummary and
+# MechanismSummary structs:
+#
+#   v0.1.x (old/short)                  v0.3.x (new/verbose)
+#   ─────────────────────────────────    ─────────────────────────────────────────
+#   average_throughput_mbps           →  average_throughput_megabytes_per_sec
+#   peak_throughput_mbps              →  peak_throughput_megabytes_per_sec
+#
+# The plugin schema uses the short names so that downstream
+# Arcaflow workflows referencing ``average_throughput_mbps``
+# etc. continue to work.  This mapping lets the parser accept
+# either naming convention from the binary.
+_SUMMARY_FIELD_RENAMES: typing.Dict[str, str] = {
+    "average_throughput_megabytes_per_sec": (
+        "average_throughput_mbps"
+    ),
+    "peak_throughput_megabytes_per_sec": (
+        "peak_throughput_mbps"
+    ),
+}
+
+
+def _normalize_summary_fields(
+    summary: typing.Dict[str, typing.Any],
+) -> None:
+    """Remap renamed summary fields to the plugin schema names.
+
+    rusty-comms v0.3.x renamed throughput fields in its JSON
+    output (see ``_SUMMARY_FIELD_RENAMES`` for the full
+    mapping).  This function rewrites the verbose v0.3.x keys
+    to the shorter schema-matching names **in-place** so the
+    SDK's ``unserialize`` can validate against the unchanged
+    plugin schema.
+
+    If the JSON already contains the short (schema) name, no
+    rename is performed to avoid accidental data loss.
+
+    Applies to both ``BenchmarkSummary`` (per-result) and
+    ``MechanismSummary`` (per-mechanism in the overall summary)
+    dicts.
+
+    Args:
+        summary: A mutable summary dict (BenchmarkSummary or
+            MechanismSummary) to normalize in-place.
+    """
+    for old_key, new_key in _SUMMARY_FIELD_RENAMES.items():
+        if old_key in summary and new_key not in summary:
+            summary[new_key] = summary.pop(old_key)
+
+
 def _parse_json_output(
     raw: typing.Dict[str, typing.Any],
 ) -> SuccessOutput:
@@ -156,6 +209,10 @@ def _parse_json_output(
     This function normalizes that into two typed fields
     (``status`` and ``failure_reason``) before handing off to
     the SDK's ``unserialize`` for validated dataclass construction.
+
+    Also normalizes field names that were renamed between
+    rusty-comms versions (e.g. v0.1.x vs v0.3.x) so the
+    plugin schema remains stable across binary upgrades.
 
     Args:
         raw: Parsed JSON dict from the ipc-benchmark output file.
@@ -178,6 +235,23 @@ def _parse_json_output(
         else:
             result["status"] = str(status)
             result["failure_reason"] = None
+
+        # Remap v0.3.x verbose throughput field names to the
+        # shorter schema names (per-result BenchmarkSummary).
+        summary = result.get("summary")
+        if isinstance(summary, dict):
+            _normalize_summary_fields(summary)
+
+    # Remap v0.3.x verbose throughput field names in the
+    # per-mechanism MechanismSummary dicts nested inside the
+    # overall OverallSummary.
+    overall = raw.get("summary")
+    if isinstance(overall, dict):
+        mechs = overall.get("mechanisms")
+        if isinstance(mechs, dict):
+            for mech_summary in mechs.values():
+                if isinstance(mech_summary, dict):
+                    _normalize_summary_fields(mech_summary)
 
     return _success_schema.unserialize(raw)
 

@@ -585,6 +585,75 @@ class JSONParsingTest(unittest.TestCase):
         self.assertEqual(result.results[0].status, "Success")
         self.assertIsNone(result.results[0].failure_reason)
 
+    def test_parse_v031_renamed_summary_fields(self):
+        """v0.3.x field names should be normalized to schema names.
+
+        rusty-comms v0.3.x renamed ``average_throughput_mbps``
+        to ``average_throughput_megabytes_per_sec`` and
+        ``peak_throughput_mbps`` to
+        ``peak_throughput_megabytes_per_sec``.  The parser must
+        accept both naming conventions.
+        """
+        raw = _build_sample_json()
+        summary = raw["results"][0]["summary"]
+        summary["average_throughput_megabytes_per_sec"] = (
+            summary.pop("average_throughput_mbps")
+        )
+        summary["peak_throughput_megabytes_per_sec"] = (
+            summary.pop("peak_throughput_mbps")
+        )
+
+        mech = raw["summary"]["mechanisms"]["Unix Domain Socket"]
+        mech["average_throughput_megabytes_per_sec"] = (
+            mech.pop("average_throughput_mbps")
+        )
+
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertIsInstance(result, SuccessOutput)
+        self.assertAlmostEqual(
+            result.results[0].summary.average_throughput_mbps,
+            305.17,
+        )
+        self.assertAlmostEqual(
+            result.results[0].summary.peak_throughput_mbps,
+            310.0,
+        )
+        mech_out = result.summary.mechanisms[
+            "Unix Domain Socket"
+        ]
+        self.assertAlmostEqual(
+            mech_out.average_throughput_mbps, 305.17,
+        )
+
+    def test_parse_old_field_names_still_work(self):
+        """Original field names should continue to parse.
+
+        Ensures backward compatibility with older binaries that
+        use the short ``_mbps`` suffixes.
+        """
+        raw = _build_sample_json()
+        result = rusty_comms_plugin._parse_json_output(raw)
+        self.assertIsInstance(result, SuccessOutput)
+        self.assertAlmostEqual(
+            result.results[0].summary.average_throughput_mbps,
+            305.17,
+        )
+
+    def test_normalize_summary_fields_no_collision(self):
+        """Normalization should not overwrite if both names exist.
+
+        If the JSON somehow contains both the old and new field
+        names, the schema-matching name should be kept.
+        """
+        summary = {
+            "average_throughput_mbps": 100.0,
+            "average_throughput_megabytes_per_sec": 999.0,
+        }
+        rusty_comms_plugin._normalize_summary_fields(summary)
+        self.assertEqual(
+            summary["average_throughput_mbps"], 100.0,
+        )
+
 
 class MergeOutputsTest(unittest.TestCase):
     """Verify _merge_outputs aggregation of duplicate mechanisms."""
