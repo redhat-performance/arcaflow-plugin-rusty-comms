@@ -22,22 +22,36 @@ tests:
     continue_on_error: true
     quiet: true
 
-  # Test 3: PMQ and TCP with 1KB messages, 3 min duration
+  # Test 3: PMQ and TCP with 1KB messages, 15s duration
+  # PMQ is extremely fast (~25M msg/min in blocking mode).
+  # Keep duration short to avoid OOM from latency buffering.
   - mechanisms:
       - pmq
       - tcp
     message_size: 1024
-    duration: 3m
+    duration: 15s
+    blocking: true
     warmup_iterations: 1000
     continue_on_error: true
     quiet: true
 
-  # Test 4: PMQ and TCP with 1KB messages, 1M count
+  # Test 4: SHM with 1KB messages, 1M count
+  - mechanisms:
+      - shm
+    message_size: 1024
+    msg_count: 1000000
+    blocking: true
+    warmup_iterations: 1000
+    continue_on_error: true
+    quiet: true
+
+  # Test 5: PMQ and TCP with 1KB messages, 1M count
   - mechanisms:
       - pmq
       - tcp
     message_size: 1024
     msg_count: 1000000
+    blocking: true
     warmup_iterations: 1000
     continue_on_error: true
     quiet: true
