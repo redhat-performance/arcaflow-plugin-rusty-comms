@@ -514,10 +514,18 @@ def _compute_iteration_aggregates(
     """Compute per-test-configuration stats across iterations.
 
     Groups BenchmarkResult entries by the full test identity
-    (mechanism + message_size + direction) and computes
-    statistical summaries of throughput and latency metrics.
-    This ensures that distinct tests using the same mechanism
-    are never averaged together.
+    (mechanism + message_size + direction) and computes:
+
+    - throughput_mbps, mean_latency_ns, p95_latency_ns,
+      p99_latency_ns: MetricStatistics (mean, stddev, min, max,
+      sample_count) across the set of per-iteration values.
+    - max_latency_ns: scalar max(per-iteration max_latency_ns) —
+      the true worst-case latency spike across all runs.
+    - min_latency_ns: scalar min(per-iteration min_latency_ns) —
+      the true best-case latency across all runs.
+
+    Latency fields are None when the binary did not report them
+    for a given mechanism/configuration.
 
     Args:
         outputs: All successful iteration outputs.

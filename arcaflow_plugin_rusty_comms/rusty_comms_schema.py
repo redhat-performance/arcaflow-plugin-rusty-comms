@@ -984,8 +984,10 @@ class IterationAggregates:
     When tests are run for multiple iterations, this structure
     provides a statistical view of key metrics grouped by the
     full test identity (mechanism + message size + direction).
-    Each unique test configuration gets its own aggregate with
-    mean, stddev, min, and max for throughput and latency.
+    Throughput and mean/percentile latency are represented as
+    MetricStatistics (mean, stddev, min, max across iterations).
+    max_latency_ns and min_latency_ns are scalar values — the
+    true worst-case spike and best-case latency across all runs.
     """
 
     tests: typing.Annotated[
