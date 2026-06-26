@@ -557,6 +557,18 @@ def _compute_iteration_aggregates(
             for s in summaries
             if s.p99_latency_ns is not None
         ]
+        # Collect per-iteration worst-case and best-case latency
+        # values to derive true overall max/min across all runs.
+        maxs = [
+            float(s.max_latency_ns)
+            for s in summaries
+            if s.max_latency_ns is not None
+        ]
+        mins = [
+            float(s.min_latency_ns)
+            for s in summaries
+            if s.min_latency_ns is not None
+        ]
 
         tests.append(TestIterationAggregate(
             mechanism=mech,
@@ -575,6 +587,10 @@ def _compute_iteration_aggregates(
             p99_latency_ns=(
                 _compute_stats(p99s) if p99s else None
             ),
+            # True worst-case: highest single-run max latency
+            max_latency_ns=max(maxs) if maxs else None,
+            # True best-case: lowest single-run min latency
+            min_latency_ns=min(mins) if mins else None,
         ))
 
     return IterationAggregates(tests=tests)

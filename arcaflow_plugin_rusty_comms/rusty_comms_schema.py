@@ -952,6 +952,30 @@ class TestIterationAggregate:
         ),
     ] = None
 
+    max_latency_ns: typing.Annotated[
+        typing.Optional[float],
+        schema.name("Max Latency (ns)"),
+        schema.description(
+            "Worst-case latency observed across all"
+            " iterations: max(per-iteration max_latency_ns)."
+            " Represents the single highest latency spike"
+            " seen during the entire test run."
+            " None when no latency data was collected."
+        ),
+    ] = None
+
+    min_latency_ns: typing.Annotated[
+        typing.Optional[float],
+        schema.name("Min Latency (ns)"),
+        schema.description(
+            "Best-case latency observed across all"
+            " iterations: min(per-iteration min_latency_ns)."
+            " Represents the single lowest latency seen"
+            " during the entire test run."
+            " None when no latency data was collected."
+        ),
+    ] = None
+
 
 @dataclass
 class IterationAggregates:
