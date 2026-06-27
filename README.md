@@ -687,6 +687,10 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
         <table><tbody><tr><th>Name:</th><td>Iterations Completed</td></tr><tr><th>Description:</th><td width="500">Number of iterations that produced results for this test configuration.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td><tr><th>Minimum:</th><td>1</td></tr>
 </tr>
 </tbody></table>
+        </details><details><summary>max_latency_ns (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Max Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Worst-case latency observed across all iterations: max(per-iteration max_latency_ns). Represents the single highest latency spike seen during the entire test run. None when no latency data was collected.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>float</code></td>
+</tr>
+</tbody></table>
         </details><details><summary>mean_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Mean Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Statistical summary of mean latency across iterations. None when no latency data was collected.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>reference[MetricStatistics]</code></td><tr><th>Referenced object:</th><td>MetricStatistics</td></tr></tr>
 </tbody></table>
@@ -695,6 +699,10 @@ Executes one or more rusty-comms IPC benchmark test runs and returns structured 
 </tbody></table>
         </details><details><summary>message_size (<code>int</code>)</summary>
         <table><tbody><tr><th>Name:</th><td>Message Size</td></tr><tr><th>Description:</th><td width="500">Payload size in bytes for this test.</td></tr><tr><th>Required:</th><td>Yes</td></tr><tr><th>Type:</th><td><code>int</code></td>
+</tr>
+</tbody></table>
+        </details><details><summary>min_latency_ns (<code>float</code>)</summary>
+        <table><tbody><tr><th>Name:</th><td>Min Latency (ns)</td></tr><tr><th>Description:</th><td width="500">Best-case latency observed across all iterations: min(per-iteration min_latency_ns). Represents the single lowest latency seen during the entire test run. None when no latency data was collected.</td></tr><tr><th>Required:</th><td>No</td></tr><tr><th>Type:</th><td><code>float</code></td>
 </tr>
 </tbody></table>
         </details><details><summary>p95_latency_ns (<code>reference[MetricStatistics]</code>)</summary>
