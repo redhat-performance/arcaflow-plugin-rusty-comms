@@ -514,10 +514,18 @@ def _compute_iteration_aggregates(
     """Compute per-test-configuration stats across iterations.
 
     Groups BenchmarkResult entries by the full test identity
-    (mechanism + message_size + direction) and computes
-    statistical summaries of throughput and latency metrics.
-    This ensures that distinct tests using the same mechanism
-    are never averaged together.
+    (mechanism + message_size + direction) and computes:
+
+    - throughput_mbps, mean_latency_ns, p95_latency_ns,
+      p99_latency_ns: MetricStatistics (mean, stddev, min, max,
+      sample_count) across the set of per-iteration values.
+    - max_latency_ns: scalar max(per-iteration max_latency_ns) —
+      the true worst-case latency spike across all runs.
+    - min_latency_ns: scalar min(per-iteration min_latency_ns) —
+      the true best-case latency across all runs.
+
+    Latency fields are None when the binary did not report them
+    for a given mechanism/configuration.
 
     Args:
         outputs: All successful iteration outputs.
@@ -557,6 +565,18 @@ def _compute_iteration_aggregates(
             for s in summaries
             if s.p99_latency_ns is not None
         ]
+        # Collect per-iteration worst-case and best-case latency
+        # values to derive true overall max/min across all runs.
+        maxs = [
+            float(s.max_latency_ns)
+            for s in summaries
+            if s.max_latency_ns is not None
+        ]
+        mins = [
+            float(s.min_latency_ns)
+            for s in summaries
+            if s.min_latency_ns is not None
+        ]
 
         tests.append(TestIterationAggregate(
             mechanism=mech,
@@ -575,6 +595,10 @@ def _compute_iteration_aggregates(
             p99_latency_ns=(
                 _compute_stats(p99s) if p99s else None
             ),
+            # True worst-case: highest single-run max latency
+            max_latency_ns=max(maxs) if maxs else None,
+            # True best-case: lowest single-run min latency
+            min_latency_ns=min(mins) if mins else None,
         ))
 
     return IterationAggregates(tests=tests)

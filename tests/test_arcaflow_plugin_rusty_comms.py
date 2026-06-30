@@ -749,16 +749,31 @@ class IterationTest(unittest.TestCase):
         self.assertEqual(stats.mean, 42.0)
         self.assertEqual(stats.stddev, 0.0)
 
-    def _make_output_with_summary(self, throughput, latency):
+    def _make_output_with_summary(
+        self, throughput, latency,
+        max_latency=None, min_latency=None,
+    ):
         """Build a SuccessOutput with specific summary metrics.
 
         Args:
             throughput: Average throughput in MB/s.
             latency: Average latency in ns (or None).
+            max_latency: Maximum observed latency in ns
+                (or None; defaults to latency * 10 when
+                latency is provided and max_latency is
+                not explicitly given).
+            min_latency: Minimum observed latency in ns
+                (or None; defaults to latency // 2 when
+                latency is provided and min_latency is
+                not explicitly given).
 
         Returns:
             A SuccessOutput with one UDS mechanism result.
         """
+        if latency is not None and max_latency is None:
+            max_latency = latency * 10
+        if latency is not None and min_latency is None:
+            min_latency = latency // 2
         summary = BenchmarkSummary(
             total_messages_sent=10000,
             total_bytes_transferred=10240000,
@@ -771,6 +786,14 @@ class IterationTest(unittest.TestCase):
             ),
             p95_latency_ns=5200 if latency else None,
             p99_latency_ns=8500 if latency else None,
+            max_latency_ns=(
+                int(max_latency) if max_latency is not None
+                else None
+            ),
+            min_latency_ns=(
+                int(min_latency) if min_latency is not None
+                else None
+            ),
         )
         result = BenchmarkResult(
             mechanism="UnixDomainSocket",
@@ -827,6 +850,44 @@ class IterationTest(unittest.TestCase):
         self.assertIsNotNone(t.mean_latency_ns)
         self.assertIsNotNone(t.p95_latency_ns)
         self.assertIsNotNone(t.p99_latency_ns)
+        self.assertIsNotNone(t.max_latency_ns)
+        self.assertIsNotNone(t.min_latency_ns)
+
+    def test_max_min_latency_ns_scalar_aggregation(self):
+        """max_latency_ns is the true max; min_latency_ns is the
+        true min across all iterations.
+
+        max(per-run max values) and min(per-run min values) give
+        the real worst-case and best-case latency spike observed
+        over the entire benchmark run, not an average of extremes.
+        """
+        outputs = [
+            self._make_output_with_summary(
+                300.0, 3200,
+                max_latency=45000, min_latency=800,
+            ),
+            self._make_output_with_summary(
+                310.0, 3100,
+                max_latency=52000, min_latency=650,
+            ),
+            self._make_output_with_summary(
+                290.0, 3300,
+                max_latency=38000, min_latency=920,
+            ),
+        ]
+        agg = rusty_comms_plugin._compute_iteration_aggregates(
+            outputs
+        )
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+
+        # max_latency_ns must be the highest of the three maxes
+        self.assertEqual(t.max_latency_ns, 52000.0)
+        # min_latency_ns must be the lowest of the three mins
+        self.assertEqual(t.min_latency_ns, 650.0)
+        # True max must be >= p99 mean (max >= p99 in any single run)
+        self.assertGreaterEqual(
+            t.max_latency_ns, t.p99_latency_ns.mean,
+        )
 
     def test_aggregates_without_latency(self):
         """Tests without latency should have None aggregates."""
@@ -842,11 +903,16 @@ class IterationTest(unittest.TestCase):
         self.assertIsNone(t.mean_latency_ns)
         self.assertIsNone(t.p95_latency_ns)
         self.assertIsNone(t.p99_latency_ns)
+        self.assertIsNone(t.max_latency_ns)
+        self.assertIsNone(t.min_latency_ns)
 
     def test_single_iteration_aggregates(self):
         """Single iteration should produce valid aggregates."""
         outputs = [
-            self._make_output_with_summary(300.0, 3200),
+            self._make_output_with_summary(
+                300.0, 3200,
+                max_latency=32000, min_latency=1500,
+            ),
         ]
         agg = rusty_comms_plugin._compute_iteration_aggregates(
             outputs
@@ -857,6 +923,147 @@ class IterationTest(unittest.TestCase):
         self.assertEqual(
             t.throughput_mbps.min_value,
             t.throughput_mbps.max_value,
+        )
+        # Single run: max/min are exactly the run's own values
+        self.assertEqual(t.max_latency_ns, 32000.0)
+        self.assertEqual(t.min_latency_ns, 1500.0)
+
+    def test_mean_and_percentile_latency_values(self):
+        """mean_latency_ns, p95_latency_ns, p99_latency_ns should
+        reflect the arithmetic mean of per-run values.
+
+        Verifies that the computed .mean fields are numerically
+        correct, not just non-None.
+        """
+        # Use distinct p95/p99 values per run so the mean is
+        # non-trivially verifiable.
+        outputs = [
+            self._make_output_with_summary(300.0, 3000),
+            self._make_output_with_summary(300.0, 4000),
+            self._make_output_with_summary(300.0, 5000),
+        ]
+        # _make_output_with_summary always sets p95=5200 and
+        # p99=8500 when latency is given, so all three runs
+        # share the same percentile values; means should
+        # equal those constants exactly.
+        agg = rusty_comms_plugin._compute_iteration_aggregates(
+            outputs
+        )
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+
+        # mean of [3000, 4000, 5000] = 4000.0
+        self.assertAlmostEqual(t.mean_latency_ns.mean, 4000.0)
+        self.assertEqual(t.mean_latency_ns.sample_count, 3)
+
+        # mean of [5200, 5200, 5200] = 5200.0
+        self.assertAlmostEqual(t.p95_latency_ns.mean, 5200.0)
+        # mean of [8500, 8500, 8500] = 8500.0
+        self.assertAlmostEqual(t.p99_latency_ns.mean, 8500.0)
+
+    def test_multiple_test_configs_grouped_separately(self):
+        """Different mechanism/size/direction combos must produce
+        independent TestIterationAggregate entries.
+
+        Ensures the grouping key (mechanism + message_size +
+        direction) works correctly so metrics from different
+        test configurations are never mixed together.
+        """
+        def _make_result(mechanism, msg_size, throughput):
+            return BenchmarkResult(
+                mechanism=mechanism,
+                status="Success",
+                test_config=TestConfiguration(
+                    message_size=msg_size,
+                    buffer_size=8192,
+                    concurrency=1,
+                    msg_count=10000,
+                    duration=None,
+                    one_way_enabled=True,
+                    round_trip_enabled=False,
+                    warmup_iterations=0,
+                    percentiles=[95.0, 99.0],
+                ),
+                summary=BenchmarkSummary(
+                    total_messages_sent=10000,
+                    total_bytes_transferred=msg_size * 10000,
+                    average_throughput_megabytes_per_sec=(
+                        throughput
+                    ),
+                    peak_throughput_megabytes_per_sec=(
+                        throughput + 5
+                    ),
+                    error_count=0,
+                ),
+                timestamp="2024-01-01T00:00:00Z",
+                test_duration={"secs": 10, "nanos": 0},
+                system_info=SAMPLE_SYSTEM_INFO,
+            )
+
+        outputs = [
+            SuccessOutput(
+                metadata=SAMPLE_METADATA,
+                results=[
+                    _make_result("UnixDomainSocket", 1024, 300.0),
+                    _make_result("SharedMemory", 1024, 600.0),
+                ],
+                summary=SAMPLE_OVERALL_SUMMARY,
+            ),
+            SuccessOutput(
+                metadata=SAMPLE_METADATA,
+                results=[
+                    _make_result("UnixDomainSocket", 1024, 310.0),
+                    _make_result("SharedMemory", 1024, 620.0),
+                ],
+                summary=SAMPLE_OVERALL_SUMMARY,
+            ),
+        ]
+        agg = rusty_comms_plugin._compute_iteration_aggregates(
+            outputs
+        )
+        # Two distinct mechanisms → two separate aggregates
+        self.assertEqual(len(agg.tests), 2)
+
+        uds = self._find_test_agg(agg, "UnixDomainSocket")
+        shm = self._find_test_agg(agg, "SharedMemory")
+
+        self.assertAlmostEqual(uds.throughput_mbps.mean, 305.0)
+        self.assertAlmostEqual(shm.throughput_mbps.mean, 610.0)
+        self.assertEqual(uds.iterations_completed, 2)
+        self.assertEqual(shm.iterations_completed, 2)
+
+    def test_partial_max_min_latency_data(self):
+        """Runs missing max/min latency data are silently skipped;
+        the aggregate reflects only the runs that reported values.
+
+        This can occur when the binary omits latency fields for
+        certain mechanism types (e.g. throughput-only modes).
+        """
+        outputs = [
+            # Run 1: has max/min latency
+            self._make_output_with_summary(
+                300.0, 3200,
+                max_latency=50000, min_latency=700,
+            ),
+            # Run 2: no latency data at all
+            self._make_output_with_summary(300.0, None),
+            # Run 3: has max/min latency
+            self._make_output_with_summary(
+                300.0, 3400,
+                max_latency=45000, min_latency=600,
+            ),
+        ]
+        agg = rusty_comms_plugin._compute_iteration_aggregates(
+            outputs
+        )
+        t = self._find_test_agg(agg, "UnixDomainSocket")
+
+        # Only runs 1 and 3 contributed max/min values
+        self.assertEqual(t.max_latency_ns, 50000.0)
+        self.assertEqual(t.min_latency_ns, 600.0)
+        # Run 2 had no latency so mean_latency_ns only covers 2
+        # of the 3 iterations
+        self.assertEqual(
+            t.mean_latency_ns.sample_count, 2
         )
 
 
