@@ -18,7 +18,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     | sh -s -- -y --default-toolchain 1.82.0
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN git clone --depth 1 --branch v0.3.1 \
+RUN git clone --depth 1 --branch v0.4.0 \
         https://github.com/redhat-performance/rusty-comms.git \
         /build/rusty-comms
 
