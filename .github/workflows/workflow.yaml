@@ -35,7 +35,7 @@ jobs:
           if-no-files-found: error
 
   act:
-    uses: arcalot/arcaflow-container-toolkit/.github/workflows/reusable_workflow.yaml@main
+    uses: arcalot/arcaflow-container-toolkit/.github/workflows/reusable_workflow.yaml@4e4973a207613100bbc46de6f9e2a05a9311a15a # main
     with:
       image_name: ${{ github.event.repository.name }}
       image_tag: 'latest'
@@ -47,7 +47,7 @@ jobs:
 
   docsgen:
     needs: act
-    uses: arcalot/arcaflow-docsgen/.github/workflows/reusable_workflow.yaml@main
+    uses: arcalot/arcaflow-docsgen/.github/workflows/reusable_workflow.yaml@a3fab7472358b6815ddd56c90ceffae314e7f347 # main
     permissions:
       contents: write
       pull-requests: write
